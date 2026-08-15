@@ -12,52 +12,44 @@ var cfgFile string
 var rootCmd = &cobra.Command{
 	Use:   "neuron",
 	Short: "Neuron workflow engine CLI",
-	Run: func(cmd *cobra.Command, args []string) {
-		err := cmd.Help()
-		if err != nil {
-			return
-		}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cmd.Help()
 	},
 }
 
-// Execute is called by main.go
+// Execute is called by main.go to start the CLI.
 func Execute() error {
 	return rootCmd.Execute()
 }
 
 func init() {
-	// 1. Tell Cobra to run initConfig BEFORE any command executes
 	cobra.OnInitialize(initConfig)
 
-	// 2. Define the global --config flag
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./neuron.yaml)")
-
-	// 3. Define another global flag (e.g., --log-level)
-	// Notice we don't bind this to a variable! We let Viper handle it.
 	rootCmd.PersistentFlags().String("log-level", "info", "Set the system logging level")
 
-	// 4. Bind the flag to Viper
-	viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
+	// Add global verbose and remote flags
+	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output (shows N.O.R.E. daemon logs)")
+	rootCmd.PersistentFlags().String("remote", "", "Remote N.O.R.E. endpoint (e.g., https://api.nore.example.com)")
+
+	// Bind flags to Viper so we can access them anywhere without passing variables around
+	_ = viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+	_ = viper.BindPFlag("remote", rootCmd.PersistentFlags().Lookup("remote"))
 }
 
-// initConfig reads the config file and environment variables.
 func initConfig() {
 	if cfgFile != "" {
-		// Use config file from the flag.
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Look for a default "neuron.yaml" in the current directory
 		viper.AddConfigPath(".")
 		viper.SetConfigName("neuron")
 		viper.SetConfigType("yaml")
 	}
 
-	// Tell Viper to also look for Environment variables that start with NEURON_
-	// e.g., NEURON_LOG_LEVEL=debug
 	viper.SetEnvPrefix("neuron")
 	viper.AutomaticEnv()
 
-	// Attempt to read the config file (ignore error if it doesn't exist)
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}

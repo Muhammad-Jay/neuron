@@ -1,18 +1,15 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 
-	"github.com/Muhammad-Jay/neuron/application/client"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 	"github.com/Muhammad-Jay/neuron/shared/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// listCmd represents the "instance list" command
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List available instances",
@@ -20,13 +17,18 @@ var listCmd = &cobra.Command{
 }
 
 func instanceListCmdHandler(cmd *cobra.Command, args []string) error {
-	ctx := context.Background()
+	ctx := cmd.Context()
 	showAll := viper.GetBool("instance.list.all")
 	statusFilter := viper.GetString("instance.list.status")
 
-	c := client.NewDefaultLocal()
-	defer c.Close()
+	// 1. Setup client and ensure Daemon is running
+	c, cleanup, err := setupNoreClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
+	// 2. Build query parameters
 	var query string
 	if showAll {
 		query = "?all=true"
@@ -36,23 +38,24 @@ func instanceListCmdHandler(cmd *cobra.Command, args []string) error {
 		query = "?status=running"
 	}
 
+	// 3. Fetch instances
 	instances, err := c.ListInstances(ctx, query)
 	if err != nil {
 		return fmt.Errorf("failed to list instances: %w", err)
 	}
 
+	// 4. Render results
 	if len(instances) == 0 {
-		printInstances(&[]protocol.InstanceResponse{})
+		printInstances([]protocol.InstanceResponse{})
 		return nil
 	}
 
-	printInstances(&instances)
-
+	printInstances(instances)
 	return nil
 }
 
-func printInstances(instances *[]protocol.InstanceResponse) {
-
+// printInstances renders a slice of instances as a formatted table to stdout.
+func printInstances(instances []protocol.InstanceResponse) {
 	columns := []utils.Column{
 		{Title: "ID"},
 		{Title: "System ID"},
@@ -64,7 +67,7 @@ func printInstances(instances *[]protocol.InstanceResponse) {
 	}
 
 	var rows [][]string
-	for _, inst := range *instances {
+	for _, inst := range instances {
 		rows = append(rows, []string{
 			inst.ID,
 			inst.SystemID,
@@ -76,25 +79,19 @@ func printInstances(instances *[]protocol.InstanceResponse) {
 		})
 	}
 
-	err := utils.RenderTable(os.Stdout, columns, rows, utils.DefaultTableOptions())
-	if err != nil {
-		fmt.Println(err.Error())
-		return
+	if err := utils.RenderTable(os.Stdout, columns, rows, utils.DefaultTableOptions()); err != nil {
+		fmt.Printf("failed to render table: %v\n", err)
 	}
 }
 
 func init() {
 	instanceCmd.AddCommand(listCmd)
 
-	// Define the flags
 	listCmd.Flags().BoolP("all", "a", false, "List all instances including inactive ones")
 	listCmd.Flags().StringP("status", "s", "", "Filter instances by specific status (e.g., running, stopped)")
 
-	// Tell Cobra these flags cannot be used together.
-	// If the user runs `neuron instance list -a -s running`, Cobra will automatically throw a helpful error!
 	listCmd.MarkFlagsMutuallyExclusive("all", "status")
 
-	// Bind to Viper
-	viper.BindPFlag("instance.list.all", listCmd.Flags().Lookup("all"))
-	viper.BindPFlag("instance.list.status", listCmd.Flags().Lookup("status"))
+	_ = viper.BindPFlag("instance.list.all", listCmd.Flags().Lookup("all"))
+	_ = viper.BindPFlag("instance.list.status", listCmd.Flags().Lookup("status"))
 }

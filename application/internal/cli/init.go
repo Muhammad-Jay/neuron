@@ -7,104 +7,83 @@ import (
 	"strings"
 
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/config"
-
 	"github.com/spf13/cobra"
 )
 
-var initCmd = &cobra.Command {
+var initCmd = &cobra.Command{
 	Use:   "init [Target]",
-	Short: "Initialize the neuron.",
-	Run: initCmdHandler,
+	Short: "Initialize a new neuron workspace",
+	RunE:  initCmdHandler,
 }
 
-func initCmdHandler(cmd *cobra.Command, args []string)  {
+func initCmdHandler(cmd *cobra.Command, args []string) error {
 	var targetFile string
-
 	if len(args) >= 1 {
 		targetFile = args[0]
 	}
 
 	cwd, err := os.Getwd()
-
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
 	path := filepath.Join(cwd, targetFile)
 
-	err = createDirectory(path)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
+	if err := createDirectory(path); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	err = createConfigFile(path)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
+	if err := createConfigFile(path); err != nil {
+		return fmt.Errorf("failed to create config file: %w", err)
 	}
+
+	return nil
 }
 
+// createDirectory ensures the target path exists.
 func createDirectory(path string) error {
 	if path == "" {
 		return fmt.Errorf("expected a directory path, but received an empty string")
 	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		err = os.Mkdir(path, os.FileMode(0755))
-		if err != nil {
-			return err
-		}
-		return nil
+		return os.MkdirAll(path, 0755)
 	}
-
 	return nil
 }
 
-func createConfigFile(path string) error  {
+// createConfigFile generates a default configuration file in the target directory.
+func createConfigFile(path string) error {
 	if path == "" {
-		fmt.Println("expected a directory path, but received an empty string")
+		return fmt.Errorf("expected a directory path, but received an empty string")
 	}
 
 	parent, err := filepath.Abs(path)
 	if err != nil {
-		fmt.Println(err.Error())
 		return err
 	}
 
 	fullPath := filepath.Join(path, config.NeuronConfigFileName)
 
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		fmt.Println("Creating config file at ", fullPath)
+		fmt.Printf("Creating config file at %s\n", fullPath)
 
 		file, err := os.Create(fullPath)
-		defer func(file *os.File) {
-			err := file.Close()
-			if err != nil {
-				fmt.Println(err.Error())
-				return
-			}
-		}(file)
-
 		if err != nil {
 			return err
 		}
+		defer file.Close()
 
-		_, err = file.Write([]byte(strings.Replace(config.NeuronConfigDefaultTemplate, "$", parent, 1)))
-		if err != nil {
+		content := strings.Replace(config.NeuronConfigDefaultTemplate, "$", parent, 1)
+		if _, err := file.Write([]byte(content)); err != nil {
 			return err
 		}
-		return err
+		return nil
 	}
 
 	fmt.Printf("File %s already exists!\n", fullPath)
 	return nil
 }
-
-
-
-
 
 func init() {
 	rootCmd.AddCommand(initCmd)
