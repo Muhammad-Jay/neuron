@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	core2 "github.com/Muhammad-Jay/neuron/shared/types/core"
+	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
 
 type Manager struct {
@@ -75,16 +76,30 @@ func (m *Manager) GetOrCreate(key Key, system *core2.System) (*Instance, bool, e
 	return i, true, nil
 }
 
-func (m *Manager) List() []*Instance {
+func (m *Manager) List(opts protocol.ListOptions) []*Instance {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	result := make([]*Instance, 0, len(m.instancesByID))
+
 	for _, i := range m.instancesByID {
-		result = append(result, i)
+		if opts.All {
+			result = append(result, i)
+		} else if opts.Status != "" {
+			if string(i.Status()) == opts.Status {
+				result = append(result, i)
+			}
+		} else {
+			// Default behavior: show only active instances (excluding stopped/failed)
+			if i.Status() != StatusStopped && i.Status() != StatusFailed {
+				result = append(result, i)
+			}
+		}
 	}
+
 	return result
 }
+
 
 func (m *Manager) Stop(id string) error {
 	m.mu.Lock()

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
 
 type Connection interface {
@@ -34,8 +36,8 @@ func (c *connection) Do(ctx context.Context, method, path string, body any, out 
 }
 
 func (c *connection) Health(ctx context.Context) error {
-	var response HealthResponse
-	if err := c.Do(ctx, http.MethodGet, HealthPath, nil, &response); err != nil {
+	var response protocol.Response
+	if err := c.Do(ctx, http.MethodGet, protocol.HealthPath, nil, &response); err != nil {
 		return err
 	}
 	if response.Status < 200 || response.Status >= 300 {

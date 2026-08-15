@@ -20,7 +20,7 @@ func main() {
 		log.Fatalf("N.O.R.E. is not healthy: %v", err.Error())
 	}
 
-	instances, err := c.ListInstances(ctx)
+	instances, err := c.ListInstances(ctx, "")
 	if err != nil {
 		fmt.Printf("N.O.R.E instance error %v\n", err)
 	}

@@ -32,7 +32,7 @@ func NewSystem(metadata core.Metadata) *System {
 //	var sys = mvp.New("Customer Platform", "1.0")
 func New(name, version string) *System {
 	return NewSystem(core.Metadata{
-		ID:      core.NewID("system_"),
+		ID:      "system_",
 		Name:    name,
 		Version: version,
 	})

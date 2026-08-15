@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/Muhammad-Jay/neuron/application/client"
-	"github.com/Muhammad-Jay/neuron/application/connection"
+	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 
 	"github.com/spf13/cobra"
 )
@@ -42,7 +42,7 @@ func cmdHandler(cmd *cobra.Command, args []string) error {
 
 	sys := customersystem.System.Build()
 
-	key := connection.InstanceKey{
+	key := protocol.InstanceKey{
 		SystemID: string(sys.Metadata.ID),
 	}
 

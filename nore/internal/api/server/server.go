@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/instance"
+	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
 
 type Response struct {
@@ -58,7 +60,7 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 }
 
 func (s *Server) StopInstances() {
-	for _, i := range s.instances.List() {
+	for _, i := range s.instances.List(protocol.ListOptions{}) {
 		_ = i.Stop()
 	}
 }
@@ -75,4 +77,17 @@ func pathID(value string) string {
 
 func errorJSON(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, Response{Message: err.Error(), Status: status})
+}
+
+func parseBool(q *url.Values, query string, defaultVal bool) bool {
+	var value bool
+	if q.Get(query) == "true" {
+		value = true
+	}else if q.Get(query) == "false" {
+		value = false
+	}else {
+		value = defaultVal
+	}
+
+	return value
 }
