@@ -1,0 +1,55 @@
+# ------------------------------------------------------------------------------
+# Go Binaries & Build Artifacts
+# ------------------------------------------------------------------------------
+# Output binaries
+neuron
+*.exe
+*.exe?
+*.dll
+*.so
+*.dylib
+
+# Test and coverage artifacts
+*.test
+*.out
+*.prof
+coverage.txt
+
+# Common build output directories
+bin/
+dist/
+
+# ------------------------------------------------------------------------------
+# JetBrains / GoLand IDE
+# ------------------------------------------------------------------------------
+# GoLand workspace and project settings
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ------------------------------------------------------------------------------
+# Configuration & Local Secrets (Viper / Environment)
+# ------------------------------------------------------------------------------
+# Local environment and secret files
+.env
+*.env
+*.pem
+*.key
+
+# Local config overrides (keep base neuron.yaml in git, ignore local variations)
+*.local.yaml
+*.local.yml
+*.local.json
+
+# ------------------------------------------------------------------------------
+# Operating System Files
+# ------------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
