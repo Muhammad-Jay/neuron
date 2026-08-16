@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -20,6 +22,7 @@ type Config struct {
 	StartTimeout   time.Duration
 	HealthInterval time.Duration
 	AttachOutput   bool
+	PIDFile        string
 }
 
 func DefaultConfig() Config {
@@ -29,5 +32,6 @@ func DefaultConfig() Config {
 		StartTimeout:   10 * time.Second,
 		HealthInterval: 100 * time.Millisecond,
 		AttachOutput:   true,
+		PIDFile:        filepath.Join(os.TempDir(), "nore.pid"),
 	}
 }

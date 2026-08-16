@@ -3,6 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/Muhammad-Jay/neuron/application/client"
 	"github.com/Muhammad-Jay/neuron/application/connection"
@@ -29,10 +32,15 @@ func setupNoreClient(ctx context.Context) (*client.Client, func(), error) {
 	}
 
 	cfg := daemon.DefaultConfig()
+	binaryPath, err := getCurrentNorePath()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// MAGIC: AttachOutput controls whether the daemon prints to the console!
 	// If false, the daemon runs silently in the background.
 	cfg.AttachOutput = isVerbose
+	cfg.BinaryPath = binaryPath
 
 	rtManager := runtime.NewManager(cfg, conn)
 
@@ -51,4 +59,24 @@ func setupNoreClient(ctx context.Context) (*client.Client, func(), error) {
 	}
 
 	return c, cleanup, nil
+}
+
+
+func getCurrentNorePath() (string, error) {
+	// 1. Allow override via Viper/Env (e.g., NEURON_NORE_PATH=/usr/bin/nore)
+	if customPath := viper.GetString("nore_path"); customPath != "" {
+		return customPath, nil
+	}
+
+	// 2. Check if "nore" is installed globally in the system's PATH
+	if path, err := exec.LookPath("nore"); err == nil {
+		return path, nil
+	}
+
+	// 3. Fallback for local development (assumes running from the neuron repo)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cwd, "../../../nore/cmd/nore/nore"), nil
 }

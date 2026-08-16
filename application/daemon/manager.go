@@ -47,7 +47,7 @@ func (m *Manager) Start(ctx context.Context) error {
 }
 
 func (m *Manager) Stop(ctx context.Context) error {
-	return m.process.Stop(ctx)
+	return m.process.StopCrossProcess(ctx, m.config)
 }
 
 func (m *Manager) waitForHealth(ctx context.Context) error {
