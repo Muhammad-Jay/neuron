@@ -11,7 +11,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/Muhammad-Jay/neuron/nore/internal/api/server"
+	"github.com/Muhammad-Jay/neuron/nore/internal/api"
+	"github.com/Muhammad-Jay/neuron/nore/internal/instance"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage/sqlite"
 )
@@ -43,7 +44,8 @@ func main() {
 	}
 	defer store.Close()
 
-	srv := server.NewServer(ctx, workers, store)
+	inst := instance.NewManager(ctx, workers, store)
+	srv := api.NewServer(inst)
 
 	type listenerEntry struct {
 		name string
