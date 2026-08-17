@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	core2 "github.com/Muhammad-Jay/neuron/shared/types/core"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
@@ -12,14 +13,15 @@ import (
 type Manager struct {
 	mu sync.RWMutex
 
-	instancesByKey map[Key]*Instance
+	instancesByKey map[protocol.InstanceKey]*Instance
 	instancesByID  map[string]*Instance
 
 	parent  context.Context
 	workers int
+	store   storage.Store
 }
 
-func NewManager(parent context.Context, workers int) *Manager {
+func NewManager(parent context.Context, workers int, store storage.Store) *Manager {
 	if parent == nil {
 		parent = context.Background()
 	}
@@ -27,14 +29,15 @@ func NewManager(parent context.Context, workers int) *Manager {
 		workers = 8
 	}
 	return &Manager{
-		instancesByKey: make(map[Key]*Instance),
+		instancesByKey: make(map[protocol.InstanceKey]*Instance),
 		instancesByID:  make(map[string]*Instance),
 		parent:         parent,
 		workers:        workers,
+		store:          store,
 	}
 }
 
-func (m *Manager) Get(key Key) (*Instance, bool) {
+func (m *Manager) Get(key protocol.InstanceKey) (*Instance, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	i, ok := m.instancesByKey[key]
@@ -48,7 +51,7 @@ func (m *Manager) GetByID(id string) (*Instance, bool) {
 	return i, ok
 }
 
-func (m *Manager) GetOrCreate(key Key, system *core2.System) (*Instance, bool, error) {
+func (m *Manager) GetOrCreate(key protocol.InstanceKey, system *core2.System) (*Instance, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -56,14 +59,12 @@ func (m *Manager) GetOrCreate(key Key, system *core2.System) (*Instance, bool, e
 		if i.Status() == StatusRunning || i.Status() == StatusStarting {
 			return i, false, nil
 		}
-		// A stopped/failed instance owns cancelled runtime resources.
-		// Recreate it rather than attempting to resurrect its context/bus.
 		delete(m.instancesByKey, key)
 		delete(m.instancesByID, i.ID)
 	}
 
 	id := core2.NewID("inst_")
-	i, err := New(m.parent, string(id), key, system, m.workers)
+	i, err := New(m.parent, string(id), key, system, m.workers, m.store)
 	if err != nil {
 		return nil, false, err
 	}
@@ -90,7 +91,6 @@ func (m *Manager) List(opts protocol.ListOptions) []*Instance {
 				result = append(result, i)
 			}
 		} else {
-			// Default behavior: show only active instances (excluding stopped/failed)
 			if i.Status() != StatusStopped && i.Status() != StatusFailed {
 				result = append(result, i)
 			}
@@ -99,7 +99,6 @@ func (m *Manager) List(opts protocol.ListOptions) []*Instance {
 
 	return result
 }
-
 
 func (m *Manager) Stop(id string) error {
 	m.mu.Lock()

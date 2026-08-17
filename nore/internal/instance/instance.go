@@ -5,15 +5,19 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 	"github.com/Muhammad-Jay/neuron/nore/internal/engine"
 	"github.com/Muhammad-Jay/neuron/nore/internal/event"
+	"github.com/Muhammad-Jay/neuron/nore/internal/execution"
 	"github.com/Muhammad-Jay/neuron/nore/internal/planner"
 	"github.com/Muhammad-Jay/neuron/nore/internal/registry"
 	"github.com/Muhammad-Jay/neuron/nore/internal/resolver"
 	"github.com/Muhammad-Jay/neuron/nore/internal/runtime"
 	"github.com/Muhammad-Jay/neuron/nore/internal/scheduler"
+	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/nore/internal/types"
 	shared "github.com/Muhammad-Jay/neuron/shared/types/core"
+	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
 
 type Status string
@@ -28,16 +32,19 @@ const (
 
 type Instance struct {
 	ID        string
-	Key       Key
+	Key       protocol.InstanceKey
 	Blueprint *types.ExecutionBlueprint
 
 	mu     sync.RWMutex
+	wg     sync.WaitGroup
 	status Status
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	bus    *event.Bus
-	store  *runtime.MemoryStore
+
+	store      contracts.ExecutionRepository
+	eventStore *event.Store
 
 	scheduler *scheduler.Scheduler
 	engine    *engine.ExecutorEngine
@@ -46,9 +53,10 @@ type Instance struct {
 func New(
 	parent context.Context,
 	id string,
-	key Key,
+	key protocol.InstanceKey,
 	system *shared.System,
 	workers int,
+	persistentStore storage.Store,
 ) (*Instance, error) {
 	if system == nil {
 		return nil, fmt.Errorf("blueprint is required")
@@ -59,7 +67,10 @@ func New(
 
 	ctx, cancel := context.WithCancel(parent)
 	bus := event.NewBus()
-	store := runtime.NewMemoryStore()
+
+	store := execution.NewExecutionStore(persistentStore)
+	evtStore := event.NewStore(persistentStore)
+
 	reg := registry.New()
 	reg.RegisterCoreServiceExecutors()
 
@@ -99,16 +110,17 @@ func New(
 	}
 
 	i := &Instance{
-		ID:        id,
-		Key:       key,
-		Blueprint: blueprint,
-		status:    StatusStarting,
-		ctx:       ctx,
-		cancel:    cancel,
-		bus:       bus,
-		store:     store,
-		scheduler: sched,
-		engine:    execEngine,
+		ID:         id,
+		Key:        key,
+		Blueprint:  blueprint,
+		status:     StatusStarting,
+		ctx:        ctx,
+		cancel:     cancel,
+		bus:        bus,
+		store:      store,
+		eventStore: evtStore,
+		scheduler:  sched,
+		engine:     execEngine,
 	}
 
 	return i, nil
@@ -128,15 +140,23 @@ func (i *Instance) Start() error {
 	i.status = StatusRunning
 	i.mu.Unlock()
 
+	i.wg.Add(3)
+
 	go func() {
+		defer i.wg.Done()
 		if err := i.scheduler.Run(i.ctx); err != nil {
 			i.fail(err)
 		}
 	}()
 	go func() {
+		defer i.wg.Done()
 		if err := i.engine.Run(i.ctx); err != nil {
 			i.fail(err)
 		}
+	}()
+	go func() {
+		defer i.wg.Done()
+		i.persistEvents(i.ctx)
 	}()
 
 	return nil
@@ -160,6 +180,8 @@ func (i *Instance) Stop() error {
 	i.mu.Unlock()
 
 	i.cancel()
+	i.wg.Wait()
+
 	i.bus.Close()
 
 	i.mu.Lock()
@@ -174,7 +196,7 @@ func (i *Instance) Status() Status {
 	return i.status
 }
 
-func (i *Instance) Store() *runtime.MemoryStore {
+func (i *Instance) Store() contracts.ExecutionRepository {
 	return i.store
 }
 
@@ -182,9 +204,10 @@ func (i *Instance) Bus() *event.Bus {
 	return i.bus
 }
 
-// Execute creates the execution context/store entry automatically.
-// The instance owns the execution infrastructure; callers never construct
-// a MemoryStore or Execution manually.
+func (i *Instance) EventStore() *event.Store {
+	return i.eventStore
+}
+
 func (i *Instance) Execute(ctx context.Context, input map[string]any) (*runtime.Execution, error) {
 	if i.Status() != StatusRunning {
 		return nil, fmt.Errorf("instance %s is not running", i.ID)
@@ -212,4 +235,36 @@ func (i *Instance) Execute(ctx context.Context, input map[string]any) (*runtime.
 	}
 
 	return execution, nil
+}
+
+func (i *Instance) ListExecutions() []*runtime.Execution {
+	return i.store.List()
+}
+
+func (i *Instance) GetExecution(id shared.ID) (*runtime.Execution, bool) {
+	return i.store.Get(id)
+}
+
+func (i *Instance) ListExecutionEvents(ctx context.Context, executionID shared.ID) ([]event.Event, error) {
+	return i.eventStore.List(ctx, executionID)
+}
+
+func (i *Instance) persistEvents(ctx context.Context) {
+	sub, err := i.bus.Subscribe(event.Unknown, 256)
+	if err != nil {
+		return
+	}
+	defer sub.Close()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt, ok := <-sub.Events():
+			if !ok {
+				return
+			}
+			_ = i.eventStore.Save(ctx, evt)
+		}
+	}
 }

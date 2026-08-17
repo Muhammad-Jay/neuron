@@ -21,14 +21,12 @@ func instanceListCmdHandler(cmd *cobra.Command, args []string) error {
 	showAll := viper.GetBool("instance.list.all")
 	statusFilter := viper.GetString("instance.list.status")
 
-	// 1. Setup client and ensure Daemon is running
 	c, cleanup, err := setupNoreClient(ctx)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	// 2. Build query parameters
 	var query string
 	if showAll {
 		query = "?all=true"
@@ -38,13 +36,11 @@ func instanceListCmdHandler(cmd *cobra.Command, args []string) error {
 		query = "?status=running"
 	}
 
-	// 3. Fetch instances
 	instances, err := c.ListInstances(ctx, query)
 	if err != nil {
 		return fmt.Errorf("failed to list instances: %w", err)
 	}
 
-	// 4. Render results
 	if len(instances) == 0 {
 		printInstances([]protocol.InstanceResponse{})
 		return nil

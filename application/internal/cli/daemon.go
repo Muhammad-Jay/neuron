@@ -26,7 +26,7 @@ var daemonStopCmd = &cobra.Command{
 		defer cancel()
 
 		cfg := daemon.DefaultConfig()
-		manager := daemon.NewManager(cfg, nil) // No health check needed to stop it
+		manager := daemon.NewManager(cfg, nil)
 
 		fmt.Println("Stopping N.O.R.E. daemon...")
 
@@ -44,6 +44,6 @@ var daemonStopCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(daemonCmd)
+	RootCmd.AddCommand(daemonCmd)
 	daemonCmd.AddCommand(daemonStopCmd)
 }

@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/Muhammad-Jay/neuron/application/connection"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
@@ -91,23 +90,46 @@ func (c *Client) EnsureInstance(ctx context.Context, key protocol.InstanceKey, s
 }
 
 // Execute triggers a workflow execution on a specific instance using the provided input data.
-func (c *Client) Execute(ctx context.Context, instanceID string, input map[string]any) (protocol.ExecuteResponse, error) {
-	instanceID = strings.TrimSpace(instanceID)
-	if instanceID == "" {
-		return protocol.ExecuteResponse{}, fmt.Errorf("instance ID is required")
+func (c *Client) Execute(ctx context.Context, instanceKey protocol.InstanceKey, system *core.System, input map[string]any) (protocol.ExecuteResponse, error) {
+	if instanceKey.SystemID == "" {
+		return protocol.ExecuteResponse{}, fmt.Errorf("instance SystemID is required")
+	}
+
+	instance, err := c.EnsureInstance(ctx, instanceKey, system)
+	if err != nil {
+		return protocol.ExecuteResponse{}, err
 	}
 
 	var response struct {
 		Data protocol.ExecuteResponse `json:"data"`
 	}
 
-	path := fmt.Sprintf(protocol.ExecutePath, instanceID)
 	req := protocol.ExecuteRequest{
 		Input: input,
 	}
 
-	if err := c.conn.Do(ctx, http.MethodPost, path, req, &response); err != nil {
+	endpoint := fmt.Sprintf(protocol.ExecutePath, instance.ID)
+
+	if err := c.conn.Do(ctx, http.MethodPost, endpoint, req, &response); err != nil {
 		return protocol.ExecuteResponse{}, err
+	}
+
+	return response.Data, nil
+}
+
+func (c *Client) GetInstanceById(ctx context.Context, instanceID string) (protocol.InstanceResponse, error)  {
+	if instanceID == "" {
+		return protocol.InstanceResponse{}, fmt.Errorf("instance ID is required")
+	}
+
+	var response struct {
+		Data protocol.InstanceResponse `json:"data"`
+	}
+
+	endpoint := fmt.Sprintf(protocol.InstanceByIDPath, instanceID)
+
+	if err := c.conn.Do(ctx, http.MethodGet, endpoint, nil, &response); err != nil {
+		return protocol.InstanceResponse{}, err
 	}
 
 	return response.Data, nil

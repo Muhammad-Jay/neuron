@@ -13,4 +13,5 @@ const (
 	ServiceStarted
 	ServiceCompleted
 	ServiceFailed
+	ServiceLog
 )

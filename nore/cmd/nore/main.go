@@ -12,6 +12,8 @@ import (
 	"syscall"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/api/server"
+	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
+	"github.com/Muhammad-Jay/neuron/nore/internal/storage/sqlite"
 )
 
 func main() {
@@ -19,17 +21,29 @@ func main() {
 		port    string
 		socket  string
 		workers int
+		dataDir string
 	)
 
 	flag.StringVar(&port, "port", ":7432", "TCP address for the N.O.R.E. API; empty disables TCP")
 	flag.StringVar(&socket, "socket", defaultSocket(), "Unix socket for local CLI clients; empty disables Unix socket")
 	flag.IntVar(&workers, "workers", 8, "executor worker count")
+	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "persistent data directory")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv := server.NewServer(ctx, workers)
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		log.Fatalf("create data directory %s: %v", dataDir, err)
+	}
+
+	store, err := sqlite.New(storage.Config{DataDir: dataDir})
+	if err != nil {
+		log.Fatalf("init storage: %v", err)
+	}
+	defer store.Close()
+
+	srv := server.NewServer(ctx, workers, store)
 
 	type listenerEntry struct {
 		name string
@@ -97,4 +111,15 @@ func defaultSocket() string {
 		return "/tmp/neuron/nore.sock"
 	}
 	return filepath.Join(home, ".neuron", "nore.sock")
+}
+
+func defaultDataDir() string {
+	if value := os.Getenv("NEURON_DATA_DIR"); value != "" {
+		return value
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp/neuron/data"
+	}
+	return filepath.Join(home, ".neuron", "nore")
 }

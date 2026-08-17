@@ -25,32 +25,32 @@ func runCmdHandler(cmd *cobra.Command, args []string) error {
 		fmt.Println("Running in verbose mode.")
 	}
 
-	// 1. Setup client and ensure Daemon is running
 	c, cleanup, err := setupNoreClient(ctx)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	// 2. Build the system
 	sys := customersystem.System.Build()
-	key := protocol.InstanceKey{
-		SystemID: string(sys.Metadata.ID),
+
+	input := map[string]any {
+		"target_url": "https://jsonplaceholder.typicode.com/todos/1",
 	}
 
-	// 3. Ensure the instance exists on the running daemon
-	res, err := c.EnsureInstance(ctx, key, sys)
+	var key = protocol.InstanceKey{SystemID: string(sys.Metadata.ID)}
+
+	res, err := c.Execute(ctx, key, sys, input)
+
 	if err != nil {
-		return fmt.Errorf("failed to ensure instance: %w", err)
+		return err
 	}
 
-	fmt.Println("Successfully created instance.")
-	fmt.Printf("Instance ID: %s\n", res.ID)
+	fmt.Println(res)
 
 	return nil
 }
 
 func init() {
-	rootCmd.AddCommand(runCmd)
+	RootCmd.AddCommand(runCmd)
 	runCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 }

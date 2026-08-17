@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -36,8 +37,33 @@ func (s *MemoryStore) Get(executionID core.ID) (*Execution, bool) {
 	return execution, exists
 }
 
+func (s *MemoryStore) Save(_ context.Context, execution *Execution) error {
+	if execution == nil {
+		return fmt.Errorf("execution is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.executions[execution.ID]; !exists {
+		return fmt.Errorf("execution %s not found", execution.ID)
+	}
+	s.executions[execution.ID] = execution
+	return nil
+}
+
 func (s *MemoryStore) Delete(executionID core.ID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.executions, executionID)
 }
+
+func (s *MemoryStore) List() []*Execution {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	list := make([]*Execution, 0, len(s.executions))
+	for _, exec := range s.executions {
+		list = append(list, exec)
+	}
+	return list
+}
+

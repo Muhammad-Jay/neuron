@@ -9,7 +9,7 @@ import (
 
 var cfgFile string
 
-var rootCmd = &cobra.Command{
+var RootCmd = &cobra.Command{
 	Use:   "neuron",
 	Short: "Neuron workflow engine CLI",
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -19,23 +19,23 @@ var rootCmd = &cobra.Command{
 
 // Execute is called by main.go to start the CLI.
 func Execute() error {
-	return rootCmd.Execute()
+	return RootCmd.Execute()
 }
 
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./neuron.yaml)")
-	rootCmd.PersistentFlags().String("log-level", "info", "Set the system logging level")
+	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./neuron.yaml)")
+	RootCmd.PersistentFlags().String("log-level", "info", "Set the system logging level")
 
 	// Add global verbose and remote flags
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output (shows N.O.R.E. daemon logs)")
-	rootCmd.PersistentFlags().String("remote", "", "Remote N.O.R.E. endpoint (e.g., https://api.nore.example.com)")
+	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output (shows N.O.R.E. daemon logs)")
+	RootCmd.PersistentFlags().String("remote", "", "Remote N.O.R.E. endpoint (e.g., https://api.nore.example.com)")
 
 	// Bind flags to Viper so we can access them anywhere without passing variables around
-	_ = viper.BindPFlag("log_level", rootCmd.PersistentFlags().Lookup("log-level"))
-	_ = viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	_ = viper.BindPFlag("remote", rootCmd.PersistentFlags().Lookup("remote"))
+	_ = viper.BindPFlag("log_level", RootCmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("verbose", RootCmd.PersistentFlags().Lookup("verbose"))
+	_ = viper.BindPFlag("remote", RootCmd.PersistentFlags().Lookup("remote"))
 }
 
 func initConfig() {

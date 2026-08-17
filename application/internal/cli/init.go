@@ -86,5 +86,5 @@ func createConfigFile(path string) error {
 }
 
 func init() {
-	rootCmd.AddCommand(initCmd)
+	RootCmd.AddCommand(initCmd)
 }

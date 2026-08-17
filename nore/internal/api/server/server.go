@@ -3,13 +3,16 @@ package server
 import (
 	"context"
 	"encoding/json"
+	maps0 "maps"
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/instance"
+	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
 
@@ -24,16 +27,19 @@ type Server struct {
 	instances *instance.Manager
 }
 
-func NewServer(ctx context.Context, workers int) *Server {
+func NewServer(ctx context.Context, workers int, store storage.Store) *Server {
 	s := &Server{
 		mux:       http.NewServeMux(),
-		instances: instance.NewManager(ctx, workers),
+		instances: instance.NewManager(ctx, workers, store),
 	}
 
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 	s.mux.HandleFunc("GET /v1/instances", s.handleInstances)
 	s.mux.HandleFunc("POST /v1/instances", s.handleCreateInstance)
 	s.mux.HandleFunc("GET /v1/instances/{id}", s.handleInstance)
+	s.mux.HandleFunc("GET /v1/instances/{id}/executions", s.handleInstanceExecutions)
+	s.mux.HandleFunc("GET /v1/instances/{id}/executions/{execID}", s.handleInstanceExecution)
+	s.mux.HandleFunc("GET /v1/instances/{id}/executions/{execID}/events", s.handleExecutionEvents)
 	s.mux.HandleFunc("POST /v1/instances/{id}/executions", s.handleExecute)
 
 	return s
@@ -79,15 +85,47 @@ func errorJSON(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, Response{Message: err.Error(), Status: status})
 }
 
-func parseBool(q *url.Values, query string, defaultVal bool) bool {
-	var value bool
-	if q.Get(query) == "true" {
-		value = true
-	}else if q.Get(query) == "false" {
-		value = false
-	}else {
-		value = defaultVal
+func parseBool(q url.Values, key string, defaultVal bool) bool {
+	val := q.Get(key)
+	if strings.EqualFold(val, "true") {
+		return true
+	}
+	if strings.EqualFold(val, "false") {
+		return false
+	}
+	return defaultVal
+}
+
+func GetQueryParams(r *http.Request) map[string]any {
+	params := make(map[string]any)
+	query := r.URL.Query()
+
+	for key, values := range query {
+		if len(values) == 1 {
+			params[key] = parseBoolVal(values[0])
+		} else if len(values) > 1 {
+			parsed := make([]any, len(values))
+			for i, v := range values {
+				parsed[i] = parseBoolVal(v)
+			}
+			params[key] = parsed
+		}
 	}
 
-	return value
+	return params
+}
+
+func parseBoolVal(v string) any {
+	if b, err := strconv.ParseBool(v); err == nil {
+		return b
+	}
+	return v
+}
+
+func MergeMaps(maps ...map[string]any) map[string]any {
+	merged := make(map[string]any)
+	for _, m := range maps {
+		maps0.Copy(merged, m)
+	}
+	return merged
 }

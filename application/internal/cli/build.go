@@ -28,7 +28,7 @@ var buildCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(buildCmd)
+	RootCmd.AddCommand(buildCmd)
 
 	// 2. Define the flag directly on the command
 	buildCmd.Flags().BoolP("watch", "w", false, "watch for file changes")

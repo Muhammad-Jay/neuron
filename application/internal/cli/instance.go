@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 	"github.com/spf13/cobra"
 )
+
+var instanceID string
 
 // instanceCmd represents the "instance" command
 var instanceCmd = &cobra.Command{
@@ -11,11 +14,48 @@ var instanceCmd = &cobra.Command{
 	Long:  `Create, list, and manage running system instances.`,
 	// If the user runs 'neuron instance' without a subcommand, show the help menu.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Help()
+		//if len(args) == 0 {
+		//	return cmd.Help()
+		//}
+		//
+		//if len(args) == 1 {
+		//	instanceID = args[0]
+		//
+		//	instance, err := getInstance(cmd, instanceID)
+		//
+		//	if instance == nil && err != nil {
+		//		return err
+		//	}
+		//
+		//	if instance == nil {
+		//		fmt.Println("Instance not found")
+		//		return nil
+		//	}
+		//
+		//	printInstances([]protocol.InstanceResponse{*instance})
+		//}
+
+		return nil
 	},
 }
 
+func getInstance(cmd *cobra.Command, id string) (*protocol.InstanceResponse, error) {
+	ctx := cmd.Context()
+
+	c, cleanup, err := setupNoreClient(ctx)
+	if err != nil {
+		return &protocol.InstanceResponse{},err
+	}
+	defer cleanup()
+
+	instance, err := c.GetInstanceById(ctx, id)
+	if err != nil {
+		return &protocol.InstanceResponse{},err
+	}
+
+	return &instance, nil
+}
+
 func init() {
-	// Attach the "instance" command to the "root" command
-	rootCmd.AddCommand(instanceCmd)
+	RootCmd.AddCommand(instanceCmd)
 }
