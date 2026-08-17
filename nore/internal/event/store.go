@@ -1,0 +1,122 @@
+package event
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
+	"github.com/Muhammad-Jay/neuron/nore/internal/storage/sqlite"
+	"github.com/Muhammad-Jay/neuron/shared/types/core"
+)
+
+type persistedEvent struct {
+	EventID       core.ID         `json:"event_id"`
+	Type          Type            `json:"type"`
+	CorrelationID core.ID         `json:"correlation_id"`
+	ExecutionID   core.ID         `json:"execution_id"`
+	ServiceID     core.ID         `json:"service_id"`
+	OccurredAt    int64           `json:"occurred_at"`
+	Payload       json.RawMessage `json:"payload"`
+}
+
+type Store struct {
+	store storage.Store
+}
+
+func NewStore(store storage.Store) *Store {
+	return &Store{store: store}
+}
+
+func (s *Store) Save(ctx context.Context, evt Event) error {
+	payload, err := json.Marshal(evt.Payload)
+	if err != nil {
+		return fmt.Errorf("marshal event payload: %w", err)
+	}
+
+	pe := persistedEvent{
+		EventID:       evt.Metadata.EventID,
+		Type:          evt.Type,
+		CorrelationID: evt.Metadata.CorrelationID,
+		ExecutionID:   evt.Metadata.ExecutionID,
+		ServiceID:     evt.Metadata.ServiceID,
+		OccurredAt:    evt.Metadata.OccurredAt.UnixNano(),
+		Payload:       payload,
+	}
+
+	data, err := json.Marshal(pe)
+	if err != nil {
+		return fmt.Errorf("marshal persisted event: %w", err)
+	}
+
+	return s.store.Put(ctx, s.key(evt.Metadata.ExecutionID, evt.Metadata.EventID), data)
+}
+
+func (s *Store) List(ctx context.Context, executionID core.ID) ([]Event, error) {
+	prefix := sqlite.SanitizeKey("events", string(executionID))
+	keys, err := s.store.List(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	events := make([]Event, 0, len(keys))
+	for _, key := range keys {
+		evt, err := s.load(ctx, key)
+		if err != nil {
+			continue
+		}
+		events = append(events, evt)
+	}
+
+	return events, nil
+}
+
+func (s *Store) ListAfter(ctx context.Context, executionID core.ID, afterEventID core.ID) ([]Event, error) {
+	all, err := s.List(ctx, executionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if afterEventID == "" {
+		return all, nil
+	}
+
+	for i, evt := range all {
+		if evt.Metadata.EventID == afterEventID {
+			return all[i+1:], nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *Store) load(ctx context.Context, key string) (Event, error) {
+	data, err := s.store.Get(ctx, key)
+	if err != nil {
+		return Event{}, err
+	}
+
+	var pe persistedEvent
+	if err := json.Unmarshal(data, &pe); err != nil {
+		return Event{}, fmt.Errorf("unmarshal persisted event: %w", err)
+	}
+
+	return Event{
+		Type: pe.Type,
+		Metadata: Metadata{
+			EventID:       pe.EventID,
+			ExecutionID:   pe.ExecutionID,
+			CorrelationID: pe.CorrelationID,
+			ServiceID:     pe.ServiceID,
+			OccurredAt:    time.Unix(0, pe.OccurredAt).UTC(),
+		},
+		Payload: pe.Payload,
+	}, nil
+}
+
+func (s *Store) key(executionID, eventID core.ID) string {
+	return sqlite.SanitizeKey("events", string(executionID), string(eventID))
+}
+
+// unixNanoToTime intentionally deleted; time.Unix is used directly in load.
