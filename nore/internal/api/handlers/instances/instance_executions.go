@@ -25,11 +25,11 @@ func (h *Handler) ListExecutions(w http.ResponseWriter, r *http.Request) {
 			CorrelationID: exec.CorrelationID,
 			Status:        string(exec.Status()),
 		}
-		if started := exec.StartedAt(); started.IsZero() {
+		if started := exec.StartedAt(); !started.IsZero() {
 			ns := started.UnixNano()
 			item.StartedAt = &ns
 		}
-		if completed := exec.CompletedAt(); completed.IsZero() {
+		if completed := exec.CompletedAt(); !completed.IsZero() {
 			ns := completed.UnixNano()
 			item.CompletedAt = &ns
 		}
@@ -101,11 +101,11 @@ func (h *Handler) GetExecutionState(w http.ResponseWriter, r *http.Request) {
 		CorrelationID: exec.CorrelationID,
 		Status:        string(exec.Status()),
 	}
-	if started := exec.StartedAt(); started.IsZero() {
+	if started := exec.StartedAt(); !started.IsZero() {
 		ns := started.UnixNano()
 		item.StartedAt = &ns
 	}
-	if completed := exec.CompletedAt(); completed.IsZero() {
+	if completed := exec.CompletedAt(); !completed.IsZero() {
 		ns := completed.UnixNano()
 		item.CompletedAt = &ns
 	}

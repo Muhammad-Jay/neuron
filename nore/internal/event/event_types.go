@@ -2,7 +2,6 @@ package event
 
 type Type uint16
 
-// TODO(FIX): make sure ExecutionCompleted Event is being published and used
 const (
 	Unknown Type = iota
 	ExecutionStarted
@@ -15,3 +14,5 @@ const (
 	ServiceFailed
 	ServiceLog
 )
+
+const All Type = 0xffff

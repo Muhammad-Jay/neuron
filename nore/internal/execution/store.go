@@ -98,9 +98,8 @@ func (s *ExecutionStore) List() []*runtime.Execution {
 		if seen[id] {
 			continue
 		}
-
 		exec, ok := s.loadFromStore(id)
-		if !ok && exec != nil {
+		if ok {
 			result = append(result, exec)
 		}
 	}

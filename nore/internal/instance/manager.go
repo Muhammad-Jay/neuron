@@ -3,8 +3,11 @@ package instance
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 
+	"github.com/Muhammad-Jay/neuron/nore/internal/event"
+	"github.com/Muhammad-Jay/neuron/nore/internal/execution"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	core2 "github.com/Muhammad-Jay/neuron/shared/types/core"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
@@ -16,9 +19,10 @@ type Manager struct {
 	instancesByKey map[protocol.InstanceKey]*Instance
 	instancesByID  map[string]*Instance
 
-	parent  context.Context
-	workers int
-	store   storage.Store
+	parent   context.Context
+	workers  int
+	store    storage.Store
+	metadata *metadataStore
 }
 
 func NewManager(parent context.Context, workers int, store storage.Store) *Manager {
@@ -28,12 +32,36 @@ func NewManager(parent context.Context, workers int, store storage.Store) *Manag
 	if workers <= 0 {
 		workers = 8
 	}
-	return &Manager{
+	m := &Manager{
 		instancesByKey: make(map[protocol.InstanceKey]*Instance),
 		instancesByID:  make(map[string]*Instance),
 		parent:         parent,
 		workers:        workers,
 		store:          store,
+		metadata:       newMetadataStore(store),
+	}
+	m.reconcile()
+	return m
+}
+
+// reconcile registers instances whose metadata was persisted by a previous
+// process so their executions and events remain queryable after a restart.
+// Instances are restored as metadata-only records and are not started.
+func (m *Manager) reconcile() {
+	records, err := m.metadata.List(context.Background())
+	if err != nil {
+		log.Printf("load instance metadata: %v", err)
+		return
+	}
+	for _, rec := range records {
+		i := restoreInstance(
+			m.parent,
+			rec,
+			execution.NewExecutionStore(m.store),
+			event.NewStore(m.store),
+		)
+		m.instancesByID[rec.ID] = i
+		m.instancesByKey[i.Key] = i
 	}
 }
 
@@ -55,15 +83,16 @@ func (m *Manager) GetOrCreate(key protocol.InstanceKey, system *core2.System) (*
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if i, ok := m.instancesByKey[key]; ok {
-		if i.Status() == StatusRunning || i.Status() == StatusStarting {
-			return i, false, nil
+	id := core2.NewID("inst_")
+	if previous, ok := m.instancesByKey[key]; ok {
+		if previous.Status() == StatusRunning || previous.Status() == StatusStarting {
+			return previous, false, nil
 		}
+		id = core2.ID(previous.ID)
 		delete(m.instancesByKey, key)
-		delete(m.instancesByID, i.ID)
+		delete(m.instancesByID, previous.ID)
 	}
 
-	id := core2.NewID("inst_")
 	i, err := New(m.parent, string(id), key, system, m.workers, m.store)
 	if err != nil {
 		return nil, false, err
@@ -74,6 +103,9 @@ func (m *Manager) GetOrCreate(key protocol.InstanceKey, system *core2.System) (*
 
 	m.instancesByKey[key] = i
 	m.instancesByID[string(id)] = i
+	if err := m.metadata.Save(context.Background(), recordFor(i, i.Status())); err != nil {
+		log.Printf("persist instance metadata for %s: %v", i.ID, err)
+	}
 	return i, true, nil
 }
 
@@ -101,15 +133,21 @@ func (m *Manager) List(opts protocol.ListOptions) []*Instance {
 }
 
 func (m *Manager) Stop(id string) error {
-	m.mu.Lock()
+	m.mu.RLock()
 	i, ok := m.instancesByID[id]
+	m.mu.RUnlock()
 	if !ok {
-		m.mu.Unlock()
 		return fmt.Errorf("instance %s not found", id)
 	}
-	delete(m.instancesByID, id)
-	delete(m.instancesByKey, i.Key)
-	m.mu.Unlock()
 
-	return i.Stop()
+	if err := i.Stop(); err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.metadata.Save(context.Background(), recordFor(i, StatusStopped)); err != nil {
+		log.Printf("persist instance metadata for %s: %v", i.ID, err)
+	}
+	return nil
 }

@@ -14,5 +14,6 @@ func Recovery(handler http.Handler) http.Handler {
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			}
 		}()
+		handler.ServeHTTP(w, r)
 	})
 }

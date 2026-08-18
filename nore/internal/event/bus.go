@@ -85,8 +85,12 @@ func (b *Bus) Publish(ctx context.Context, event Event) error {
 		return ErrBusClosed
 	}
 	current := b.subscriptions[event.Type]
-	subscribers := make([]*subscription, 0, len(current))
+	all := b.subscriptions[All]
+	subscribers := make([]*subscription, 0, len(current)+len(all))
 	for _, sub := range current {
+		subscribers = append(subscribers, sub)
+	}
+	for _, sub := range all {
 		subscribers = append(subscribers, sub)
 	}
 	b.mu.RUnlock()

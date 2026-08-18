@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 	"github.com/Muhammad-Jay/neuron/nore/internal/engine"
@@ -39,15 +40,18 @@ type Instance struct {
 	wg     sync.WaitGroup
 	status Status
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	bus    *event.Bus
+	ctx       context.Context
+	cancel    context.CancelFunc
+	bus       *event.Bus
+	createdAt time.Time
 
 	store      contracts.ExecutionRepository
 	eventStore *event.Store
 
 	scheduler *scheduler.Scheduler
 	engine    *engine.ExecutorEngine
+
+	execPersister *executionPersister
 }
 
 func New(
@@ -109,18 +113,27 @@ func New(
 		return nil, fmt.Errorf("create executor engine: %w", err)
 	}
 
+	persister, err := newExecutionPersister(bus, store)
+	if err != nil {
+		cancel()
+		bus.Close()
+		return nil, fmt.Errorf("create execution persister: %w", err)
+	}
+
 	i := &Instance{
-		ID:         id,
-		Key:        key,
-		Blueprint:  blueprint,
-		status:     StatusStarting,
-		ctx:        ctx,
-		cancel:     cancel,
-		bus:        bus,
-		store:      store,
-		eventStore: evtStore,
-		scheduler:  sched,
-		engine:     execEngine,
+		ID:            id,
+		Key:           key,
+		Blueprint:     blueprint,
+		status:        StatusStarting,
+		ctx:           ctx,
+		cancel:        cancel,
+		bus:           bus,
+		createdAt:     time.Now().UTC(),
+		store:         store,
+		eventStore:    evtStore,
+		scheduler:     sched,
+		engine:        execEngine,
+		execPersister: persister,
 	}
 
 	return i, nil
@@ -140,7 +153,11 @@ func (i *Instance) Start() error {
 	i.status = StatusRunning
 	i.mu.Unlock()
 
-	i.wg.Add(3)
+	if i.scheduler == nil || i.engine == nil {
+		return fmt.Errorf("instance %s has no runtime; it was restored from metadata", i.ID)
+	}
+
+	i.wg.Add(4)
 
 	go func() {
 		defer i.wg.Done()
@@ -157,6 +174,10 @@ func (i *Instance) Start() error {
 	go func() {
 		defer i.wg.Done()
 		i.persistEvents(i.ctx)
+	}()
+	go func() {
+		defer i.wg.Done()
+		_ = i.execPersister.Run(i.ctx)
 	}()
 
 	return nil
@@ -180,9 +201,10 @@ func (i *Instance) Stop() error {
 	i.mu.Unlock()
 
 	i.cancel()
-	i.wg.Wait()
-
-	i.bus.Close()
+	if i.bus != nil {
+		i.wg.Wait()
+		i.bus.Close()
+	}
 
 	i.mu.Lock()
 	i.status = StatusStopped
@@ -250,12 +272,11 @@ func (i *Instance) ListExecutionEvents(ctx context.Context, executionID shared.I
 }
 
 func (i *Instance) persistEvents(ctx context.Context) {
-	sub, err := i.bus.Subscribe(event.Unknown, 256)
+	sub, err := i.bus.Subscribe(event.All, 256)
 	if err != nil {
 		return
 	}
 	defer sub.Close()
-
 	for {
 		select {
 		case <-ctx.Done():
