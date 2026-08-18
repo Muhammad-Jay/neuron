@@ -40,7 +40,7 @@ func New() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(newListCmd(), newExecCmd())
+	cmd.AddCommand(newListCmd())
 
 	return cmd
 }

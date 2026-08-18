@@ -55,7 +55,7 @@ func (c *Client) ListInstances(ctx context.Context, queryPath string) ([]protoco
 
 	if queryPath == "" || queryPath == "/" {
 		path = protocol.InstancesPath
-	}else {
+	} else {
 		path = fmt.Sprintf(protocol.InstancesPath + queryPath)
 	}
 
@@ -117,7 +117,27 @@ func (c *Client) Execute(ctx context.Context, instanceKey protocol.InstanceKey, 
 	return response.Data, nil
 }
 
-func (c *Client) GetInstanceById(ctx context.Context, instanceID string) (protocol.InstanceResponse, error)  {
+// ListExecutions retrieves all executions recorded for the instance identified
+// by instanceID. It returns an empty slice when the instance has no executions.
+func (c *Client) ListExecutions(ctx context.Context, instanceID string) ([]protocol.ExecutionItem, error) {
+	if instanceID == "" {
+		return nil, fmt.Errorf("instance ID is required")
+	}
+
+	var response struct {
+		Data []protocol.ExecutionItem `json:"data"`
+	}
+
+	endpoint := fmt.Sprintf(protocol.ExecutePath, instanceID)
+
+	if err := c.conn.Do(ctx, http.MethodGet, endpoint, nil, &response); err != nil {
+		return nil, err
+	}
+
+	return response.Data, nil
+}
+
+func (c *Client) GetInstanceById(ctx context.Context, instanceID string) (protocol.InstanceResponse, error) {
 	if instanceID == "" {
 		return protocol.InstanceResponse{}, fmt.Errorf("instance ID is required")
 	}
