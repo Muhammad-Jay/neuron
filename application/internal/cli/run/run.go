@@ -1,20 +1,27 @@
-package cli
+package run
 
 import (
 	customersystem "development/systems/customer-system"
 	"fmt"
 
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 	"github.com/spf13/cobra"
 )
 
 var verbose bool
 
-var runCmd = &cobra.Command{
-	Use:   "run",
-	Short: "Run a Neuron System",
-	Long:  "Run a Neuron System, and the internal N.O.R.E runtime will execute the System.",
-	RunE:  runCmdHandler,
+func New() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run a Neuron System",
+		Long:  "Run a Neuron System, and the internal N.O.R.E runtime will execute the System.",
+		RunE:  runCmdHandler,
+	}
+
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+
+	return cmd
 }
 
 func runCmdHandler(cmd *cobra.Command, args []string) error {
@@ -25,7 +32,7 @@ func runCmdHandler(cmd *cobra.Command, args []string) error {
 		fmt.Println("Running in verbose mode.")
 	}
 
-	c, cleanup, err := setupNoreClient(ctx)
+	c, cleanup, err := bootstrap.SetupClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -33,7 +40,7 @@ func runCmdHandler(cmd *cobra.Command, args []string) error {
 
 	sys := customersystem.System.Build()
 
-	input := map[string]any {
+	input := map[string]any{
 		"target_url": "https://jsonplaceholder.typicode.com/todos/1",
 	}
 
@@ -48,9 +55,4 @@ func runCmdHandler(cmd *cobra.Command, args []string) error {
 	fmt.Println(res)
 
 	return nil
-}
-
-func init() {
-	RootCmd.AddCommand(runCmd)
-	runCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 }

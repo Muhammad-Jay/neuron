@@ -1,4 +1,4 @@
-package cli
+package initcmd
 
 import (
 	"fmt"
@@ -10,10 +10,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var initCmd = &cobra.Command{
-	Use:   "init [Target]",
-	Short: "Initialize a new neuron workspace",
-	RunE:  initCmdHandler,
+func New() *cobra.Command {
+	return &cobra.Command{
+		Use:   "init [Target]",
+		Short: "Initialize a new neuron workspace",
+		RunE:  initCmdHandler,
+	}
 }
 
 func initCmdHandler(cmd *cobra.Command, args []string) error {
@@ -83,8 +85,4 @@ func createConfigFile(path string) error {
 
 	fmt.Printf("File %s already exists!\n", fullPath)
 	return nil
-}
-
-func init() {
-	RootCmd.AddCommand(initCmd)
 }

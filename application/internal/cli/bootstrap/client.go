@@ -1,4 +1,4 @@
-package cli
+package bootstrap
 
 import (
 	"context"
@@ -14,9 +14,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-// setupNoreClient initializes the connection, ensures the daemon is running
+// SetupClient initializes the connection, ensures the daemon is running
 // (if local), and returns the initialized client alongside a cleanup function.
-func setupNoreClient(ctx context.Context) (*client.Client, func(), error) {
+func SetupClient(ctx context.Context) (*client.Client, func(), error) {
 	remoteURL := viper.GetString("remote")
 	isRemote := remoteURL != ""
 	isVerbose := viper.GetBool("verbose")
@@ -32,7 +32,7 @@ func setupNoreClient(ctx context.Context) (*client.Client, func(), error) {
 	}
 
 	cfg := daemon.DefaultConfig()
-	binaryPath, err := getCurrentNorePath()
+	binaryPath, err := NoreBinaryPath()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -61,8 +61,7 @@ func setupNoreClient(ctx context.Context) (*client.Client, func(), error) {
 	return c, cleanup, nil
 }
 
-
-func getCurrentNorePath() (string, error) {
+func NoreBinaryPath() (string, error) {
 	// 1. Allow override via Viper/Env (e.g., NEURON_NORE_PATH=/usr/bin/nore)
 	if customPath := viper.GetString("nore_path"); customPath != "" {
 		return customPath, nil

@@ -3,6 +3,12 @@ package cli
 import (
 	"fmt"
 
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/build"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/daemon"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/execution"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/initcmd"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/instance"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/run"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -36,6 +42,15 @@ func init() {
 	_ = viper.BindPFlag("log_level", RootCmd.PersistentFlags().Lookup("log-level"))
 	_ = viper.BindPFlag("verbose", RootCmd.PersistentFlags().Lookup("verbose"))
 	_ = viper.BindPFlag("remote", RootCmd.PersistentFlags().Lookup("remote"))
+
+	RootCmd.AddCommand(
+		run.New(),
+		build.New(),
+		instance.New(),
+		execution.New(),
+		daemon.New(),
+		initcmd.New(),
+	)
 }
 
 func initConfig() {
