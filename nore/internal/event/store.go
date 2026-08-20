@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
@@ -68,6 +69,16 @@ func (s *Store) List(ctx context.Context, executionID core.ID) ([]Event, error) 
 		}
 		events = append(events, evt)
 	}
+
+	// Event IDs are millisecond-precise; a burst of events within one
+	// millisecond can store out of order. Sort by the nanosecond occurrence
+	// time, breaking ties by event ID, so history is always chronological.
+	sort.SliceStable(events, func(i, j int) bool {
+		if !events[i].Metadata.OccurredAt.Equal(events[j].Metadata.OccurredAt) {
+			return events[i].Metadata.OccurredAt.Before(events[j].Metadata.OccurredAt)
+		}
+		return events[i].Metadata.EventID < events[j].Metadata.EventID
+	})
 
 	return events, nil
 }

@@ -1,6 +1,10 @@
 package protocol
 
-import "github.com/Muhammad-Jay/neuron/shared/types/core"
+import (
+	"encoding/json"
+
+	"github.com/Muhammad-Jay/neuron/shared/types/core"
+)
 
 type ExecutionItem struct {
 	ID            core.ID  `json:"id"`
@@ -16,4 +20,15 @@ type EventItem struct {
 	Type          string   `json:"type"`
 	ServiceID     core.ID  `json:"service_id"`
 	Payload       any      `json:"payload"`
+}
+
+// StreamEvent is the canonical wire shape for both historical replay and live
+// stream events emitted over the SSE endpoint.
+type StreamEvent struct {
+	ID            core.ID         `json:"id"`
+	Type          string          `json:"type"`
+	CorrelationID core.ID         `json:"correlation_id,omitempty"`
+	ServiceID     core.ID         `json:"service_id,omitempty"`
+	OccurredAt    int64           `json:"occurred_at"`
+	Payload       json.RawMessage `json:"payload,omitempty"`
 }

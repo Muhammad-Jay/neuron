@@ -75,7 +75,7 @@ func (h *Handler) Execute(w http.ResponseWriter, r *http.Request) {
 		Data: protocol.ExecuteResponse{
 			ExecutionID: execution.ID,
 			InstanceID:  i.ID,
-			Status:      string(i.Status()),
+			Status:      string(execution.Status()),
 		},
 	})
 }
@@ -140,7 +140,7 @@ func (h *Handler) GetExecutionEvents(w http.ResponseWriter, r *http.Request) {
 	for _, evt := range events {
 		items = append(items, protocol.EventItem{
 			ID:        evt.Metadata.EventID,
-			Type:      fmt.Sprintf("%d", evt.Type),
+			Type:      evt.Type.String(),
 			ServiceID: evt.Metadata.ServiceID,
 			Payload:   evt.Payload,
 		})

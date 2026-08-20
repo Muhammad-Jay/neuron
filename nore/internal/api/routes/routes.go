@@ -24,6 +24,7 @@ func BuildRoutes(mux *http.ServeMux, mgr *instance.Manager) http.Handler {
 	mux.HandleFunc("GET /v1/instances/{id}/executions", instHandler.ListExecutions)
 	mux.HandleFunc("GET /v1/instances/{id}/executions/{execID}", instHandler.GetExecutionState)
 	mux.HandleFunc("GET /v1/instances/{id}/executions/{execID}/events", instHandler.GetExecutionEvents)
+	mux.HandleFunc("GET /v1/instances/{id}/executions/{execID}/events/stream", instHandler.StreamExecutionEvents)
 
 	handler := middleware.Recovery(mux)
 	handler = middleware.Logging(handler)

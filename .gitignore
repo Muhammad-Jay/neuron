@@ -11,6 +11,7 @@ nore
 *.dylib
 
 # Test and coverage artifacts
+*_test.go
 *.test
 *.out
 *.prof

@@ -47,7 +47,7 @@ func init() {
 		),
 		mvp.Input(
 			"api_body",
-			core.ValueString,
+			core.ValueObject,
 			true,
 		),
 	}

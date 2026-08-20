@@ -14,6 +14,7 @@ type Analytics struct {
 	logger *slog.Logger
 
 	executionStarted event.Subscription
+	executionFailed  event.Subscription
 	serviceCompleted event.Subscription
 	serviceFailed    event.Subscription
 }
@@ -31,6 +32,13 @@ func New(bus contracts.EventBus, logger *slog.Logger) (*Analytics, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	executionFailed, err :=bus.Subscribe(event.ExecutionFailed, 64)
+	if err != nil {
+		_ = started.Close()
+		return nil, err
+	}
+
 	completed, err := bus.Subscribe(event.ServiceCompleted, 64)
 	if err != nil {
 		_ = started.Close()
@@ -47,6 +55,7 @@ func New(bus contracts.EventBus, logger *slog.Logger) (*Analytics, error) {
 		bus:              bus,
 		logger:           logger,
 		executionStarted: started,
+		executionFailed:  executionFailed,
 		serviceCompleted: completed,
 		serviceFailed:    failed,
 	}, nil
@@ -67,6 +76,30 @@ func (a *Analytics) Serve(ctx context.Context) error {
 			a.logger.Info("Execution started",
 				slog.String("execution_id", string(received.Metadata.ExecutionID)),
 				slog.String("correlation_id", string(received.Metadata.CorrelationID)),
+				slog.Time("occurred_at", received.Metadata.OccurredAt.UTC()),
+			)
+
+		case received, open := <-a.executionFailed.Events():
+			if !open {
+				return nil
+			}
+
+			var errMsg string
+			switch payload := received.Payload.(type) {
+			case event.ExecutionFailedPayload:
+				errMsg = payload.Message
+			case string:
+				errMsg = payload
+			case fmt.Stringer:
+				errMsg = payload.String()
+			default:
+				errMsg = fmt.Sprintf("%v", received.Payload)
+			}
+
+			a.logger.Info("Execution failed",
+				slog.String("execution_id", string(received.Metadata.ExecutionID)),
+				slog.String("correlation_id", string(received.Metadata.CorrelationID)),
+				slog.String("error_message", errMsg),
 				slog.Time("occurred_at", received.Metadata.OccurredAt.UTC()),
 			)
 
@@ -97,6 +130,7 @@ func (a *Analytics) Serve(ctx context.Context) error {
 
 func (a *Analytics) closeSubscriptions() {
 	_ = a.executionStarted.Close()
+	_ = a.executionFailed.Close()
 	_ = a.serviceCompleted.Close()
 	_ = a.serviceFailed.Close()
 }

@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 	"github.com/Muhammad-Jay/neuron/nore/internal/event"
@@ -60,6 +61,10 @@ func (p *executionPersister) Run(ctx context.Context) error {
 				continue
 			}
 			if err := p.store.Save(ctx, execution); err != nil {
+				slog.Error("persist execution snapshot",
+					slog.String("execution_id", string(execution.ID)),
+					slog.String("error", err.Error()),
+				)
 				continue
 			}
 		}

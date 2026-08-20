@@ -3,9 +3,11 @@ package instance
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/Muhammad-Jay/neuron/nore/internal/analytics"
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 	"github.com/Muhammad-Jay/neuron/nore/internal/engine"
 	"github.com/Muhammad-Jay/neuron/nore/internal/event"
@@ -16,6 +18,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/runtime"
 	"github.com/Muhammad-Jay/neuron/nore/internal/scheduler"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
+	"github.com/Muhammad-Jay/neuron/nore/internal/stream"
 	"github.com/Muhammad-Jay/neuron/nore/internal/types"
 	shared "github.com/Muhammad-Jay/neuron/shared/types/core"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
@@ -50,6 +53,8 @@ type Instance struct {
 
 	scheduler *scheduler.Scheduler
 	engine    *engine.ExecutorEngine
+
+	analytics *analytics.Analytics
 
 	execPersister *executionPersister
 }
@@ -113,6 +118,13 @@ func New(
 		return nil, fmt.Errorf("create executor engine: %w", err)
 	}
 
+	anly, err := analytics.New(bus, slog.Default())
+	if err != nil {
+		cancel()
+		bus.Close()
+		return nil, fmt.Errorf("create Analytics engine: %w", err)
+	}
+
 	persister, err := newExecutionPersister(bus, store)
 	if err != nil {
 		cancel()
@@ -133,6 +145,7 @@ func New(
 		eventStore:    evtStore,
 		scheduler:     sched,
 		engine:        execEngine,
+		analytics:     anly,
 		execPersister: persister,
 	}
 
@@ -157,8 +170,14 @@ func (i *Instance) Start() error {
 		return fmt.Errorf("instance %s has no runtime; it was restored from metadata", i.ID)
 	}
 
-	i.wg.Add(4)
+	i.wg.Add(5)
 
+	go func() {
+		defer i.wg.Done()
+		if err := i.analytics.Serve(i.ctx); err != nil {
+			i.fail(err)
+		}
+	}()
 	go func() {
 		defer i.wg.Done()
 		if err := i.scheduler.Run(i.ctx); err != nil {
@@ -235,11 +254,11 @@ func (i *Instance) Execute(ctx context.Context, input map[string]any) (*runtime.
 		return nil, fmt.Errorf("instance %s is not running", i.ID)
 	}
 
-	execution, err := runtime.NewExecution(i.Blueprint, shared.NewID("request_"))
+	exec, err := runtime.NewExecution(i.Blueprint, shared.NewID("request_"))
 	if err != nil {
 		return nil, err
 	}
-	if err := i.store.Add(execution); err != nil {
+	if err := i.store.Add(exec); err != nil {
 		return nil, err
 	}
 
@@ -247,8 +266,8 @@ func (i *Instance) Execute(ctx context.Context, input map[string]any) (*runtime.
 		ctx,
 		event.New(
 			event.ExecutionStarted,
-			execution.ID,
-			execution.CorrelationID,
+			exec.ID,
+			exec.CorrelationID,
 			"",
 			event.ExecutionStartedPayload{Input: input},
 		),
@@ -256,7 +275,7 @@ func (i *Instance) Execute(ctx context.Context, input map[string]any) (*runtime.
 		return nil, fmt.Errorf("publish execution start: %w", err)
 	}
 
-	return execution, nil
+	return exec, nil
 }
 
 func (i *Instance) ListExecutions() []*runtime.Execution {
@@ -269,6 +288,11 @@ func (i *Instance) GetExecution(id shared.ID) (*runtime.Execution, bool) {
 
 func (i *Instance) ListExecutionEvents(ctx context.Context, executionID shared.ID) ([]event.Event, error) {
 	return i.eventStore.List(ctx, executionID)
+}
+
+// Events composes persisted history with live bus events for the execution.
+func (i *Instance) Events(ctx context.Context, executionID shared.ID, after shared.ID) (<-chan stream.Message, error) {
+	return stream.Subscribe(ctx, i.bus, i.eventStore, executionID, after)
 }
 
 func (i *Instance) persistEvents(ctx context.Context) {
@@ -285,7 +309,13 @@ func (i *Instance) persistEvents(ctx context.Context) {
 			if !ok {
 				return
 			}
-			_ = i.eventStore.Save(ctx, evt)
+			if err := i.eventStore.Save(ctx, evt); err != nil {
+				slog.Error("persist event",
+					slog.String("event_id", string(evt.Metadata.EventID)),
+					slog.String("execution_id", string(evt.Metadata.ExecutionID)),
+					slog.String("error", err.Error()),
+				)
+			}
 		}
 	}
 }
