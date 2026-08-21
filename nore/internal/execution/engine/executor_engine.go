@@ -6,7 +6,7 @@ import (
 
 	"sync"
 
-	runtimemodel "github.com/Muhammad-Jay/neuron/nore/internal/runtime"
+	exec "github.com/Muhammad-Jay/neuron/nore/internal/execution"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
@@ -111,6 +111,7 @@ func (e *ExecutorEngine) executeService(ctx context.Context, received event.Even
 	output, err := executor.Execute(ctx, contracts.ExecutionContext{
 		ExecutionID: execution.ID, CorrelationID: execution.CorrelationID,
 		Service: node.Service, Input: input, ServiceConfigurations: resolvedConfig,
+		Logger: newExecLogger(e.bus, execution.ID, execution.CorrelationID, serviceID),
 	})
 	if err != nil {
 		e.publishFailure(ctx, execution, serviceID, err)
@@ -126,7 +127,7 @@ func (e *ExecutorEngine) executeService(ctx context.Context, received event.Even
 	_ = e.bus.Publish(ctx, event.New(event.ServiceCompleted, execution.ID, execution.CorrelationID, serviceID, event.ServiceCompletedPayload{Output: output}))
 }
 
-func (e *ExecutorEngine) publishFailure(ctx context.Context, execution *runtimemodel.Execution, serviceID core.ID, err error) {
+func (e *ExecutorEngine) publishFailure(ctx context.Context, execution *exec.Execution, serviceID core.ID, err error) {
 	execution.MarkServiceFailed(serviceID, err)
 	_ = e.bus.Publish(ctx, event.New(event.ServiceFailed, execution.ID, execution.CorrelationID, serviceID, event.ServiceFailedPayload{Message: err.Error()}))
 }

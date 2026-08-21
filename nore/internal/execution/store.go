@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Muhammad-Jay/neuron/nore/internal/runtime"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage/sqlite"
 	shared "github.com/Muhammad-Jay/neuron/shared/types/core"
@@ -13,23 +12,23 @@ import (
 
 type ExecutionStore struct {
 	mu    sync.RWMutex
-	mem   *runtime.MemoryStore
+	mem   *MemoryStore
 	store storage.Store
 }
 
 func NewExecutionStore(store storage.Store) *ExecutionStore {
 	return &ExecutionStore{
-		mem:   runtime.NewMemoryStore(),
+		mem:   NewMemoryStore(),
 		store: store,
 	}
 }
 
-func (s *ExecutionStore) Add(execution *runtime.Execution) error {
+func (s *ExecutionStore) Add(execution *Execution) error {
 	if err := s.mem.Add(execution); err != nil {
 		return err
 	}
 
-	data, err := runtime.MarshalExecution(execution)
+	data, err := MarshalExecution(execution)
 	if err != nil {
 		return fmt.Errorf("marshal execution: %w", err)
 	}
@@ -41,7 +40,7 @@ func (s *ExecutionStore) Add(execution *runtime.Execution) error {
 	return nil
 }
 
-func (s *ExecutionStore) Get(executionID shared.ID) (*runtime.Execution, bool) {
+func (s *ExecutionStore) Get(executionID shared.ID) (*Execution, bool) {
 	exec, ok := s.mem.Get(executionID)
 	if ok {
 		return exec, true
@@ -50,12 +49,12 @@ func (s *ExecutionStore) Get(executionID shared.ID) (*runtime.Execution, bool) {
 	return s.loadFromStore(executionID)
 }
 
-func (s *ExecutionStore) Save(ctx context.Context, execution *runtime.Execution) error {
+func (s *ExecutionStore) Save(ctx context.Context, execution *Execution) error {
 	if err := s.mem.Save(ctx, execution); err != nil {
 		return err
 	}
 
-	data, err := runtime.MarshalExecution(execution)
+	data, err := MarshalExecution(execution)
 	if err != nil {
 		return fmt.Errorf("marshal execution: %w", err)
 	}
@@ -73,9 +72,10 @@ func (s *ExecutionStore) Delete(executionID shared.ID) {
 
 	s.mem.Delete(executionID)
 	_ = s.store.Delete(context.Background(), s.key(executionID))
+
 }
 
-func (s *ExecutionStore) List() []*runtime.Execution {
+func (s *ExecutionStore) List() []*Execution {
 	s.mu.RLock()
 	keys, err := s.store.List(context.Background(), "executions/")
 	s.mu.RUnlock()
@@ -84,7 +84,7 @@ func (s *ExecutionStore) List() []*runtime.Execution {
 		return s.mem.List()
 	}
 
-	result := make([]*runtime.Execution, 0, len(keys))
+	result := make([]*Execution, 0, len(keys))
 	seen := make(map[shared.ID]bool)
 
 	live := s.mem.List()
@@ -107,13 +107,13 @@ func (s *ExecutionStore) List() []*runtime.Execution {
 	return result
 }
 
-func (s *ExecutionStore) loadFromStore(executionID shared.ID) (*runtime.Execution, bool) {
+func (s *ExecutionStore) loadFromStore(executionID shared.ID) (*Execution, bool) {
 	data, err := s.store.Get(context.Background(), s.key(executionID))
 	if err != nil {
 		return nil, false
 	}
 
-	exec, err := runtime.UnmarshalExecution(data)
+	exec, err := UnmarshalExecution(data)
 	if err != nil {
 		return nil, false
 	}

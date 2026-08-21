@@ -5,6 +5,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -56,7 +57,7 @@ func (c *Client) ListInstances(ctx context.Context, queryPath string) ([]protoco
 	if queryPath == "" || queryPath == "/" {
 		path = protocol.InstancesPath
 	} else {
-		path = fmt.Sprintf(protocol.InstancesPath + queryPath)
+		path = protocol.InstancesPath + queryPath
 	}
 
 	if err := c.conn.Do(ctx, http.MethodGet, path, nil, &response); err != nil {
@@ -90,31 +91,65 @@ func (c *Client) EnsureInstance(ctx context.Context, key protocol.InstanceKey, s
 }
 
 // Execute triggers a workflow execution on a specific instance using the provided input data.
-func (c *Client) Execute(ctx context.Context, instanceKey protocol.InstanceKey, system *core.System, input map[string]any) (protocol.ExecuteResponse, error) {
+// If mode is "detach", it returns immediately with ExecuteResponse (HTTP 202).
+// Otherwise, it waits for completion and returns ExecutionResult (HTTP 200).
+func (c *Client) Execute(ctx context.Context, instanceKey protocol.InstanceKey, system *core.System, input map[string]any, mode string) (protocol.ExecutionResult, error) {
 	if instanceKey.SystemID == "" {
-		return protocol.ExecuteResponse{}, fmt.Errorf("instance SystemID is required")
+		return protocol.ExecutionResult{}, fmt.Errorf("instance SystemID is required")
 	}
 
 	instance, err := c.EnsureInstance(ctx, instanceKey, system)
 	if err != nil {
-		return protocol.ExecuteResponse{}, err
-	}
-
-	var response struct {
-		Data protocol.ExecuteResponse `json:"data"`
+		return protocol.ExecutionResult{}, err
 	}
 
 	req := protocol.ExecuteRequest{
 		Input: input,
+		Mode:  mode,
 	}
 
 	endpoint := fmt.Sprintf(protocol.ExecutePath, instance.ID)
 
-	if err := c.conn.Do(ctx, http.MethodPost, endpoint, req, &response); err != nil {
-		return protocol.ExecuteResponse{}, err
+	if mode == "detach" {
+		var response struct {
+			Data protocol.ExecuteResponse `json:"data"`
+		}
+		if err := c.conn.Do(ctx, http.MethodPost, endpoint, req, &response); err != nil {
+			return protocol.ExecutionResult{}, err
+		}
+		return protocol.ExecutionResult{
+			ExecutionID: response.Data.ExecutionID,
+			InstanceID:  response.Data.InstanceID,
+			Status:      response.Data.Status,
+		}, nil
 	}
 
+	var response struct {
+		Data protocol.ExecutionResult `json:"data"`
+	}
+	if err := c.conn.Do(ctx, http.MethodPost, endpoint, req, &response); err != nil {
+		return protocol.ExecutionResult{}, err
+	}
 	return response.Data, nil
+}
+
+// StreamExecutionEvents connects to the SSE stream for an execution and calls
+// the emit callback for each StreamEvent received. It blocks until the stream
+// ends or the context is cancelled.
+func (c *Client) StreamExecutionEvents(ctx context.Context, instanceID string, executionID core.ID, emit func(protocol.StreamEvent) error) error {
+	endpoint := fmt.Sprintf(protocol.ExecutionEventsStreamPath, instanceID, executionID)
+
+	//var response struct {
+	//	Data protocol.StreamEvent `json:"data"`
+	//}
+
+	return c.conn.Stream(ctx, http.MethodGet, endpoint, nil, func(data []byte) error {
+		var evt protocol.StreamEvent
+		if err := json.Unmarshal(data, &evt); err != nil {
+			return fmt.Errorf("unmarshal stream event: %w", err)
+		}
+		return emit(evt)
+	})
 }
 
 // ListExecutions retrieves all executions recorded for the instance identified

@@ -9,10 +9,12 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 )
 
+// HttpExecutor performs a single HTTP request from the merged input/config and returns status/body.
 type HttpExecutor struct{}
 
 func (HttpExecutor) Execute(ctx context.Context, execution contracts.ExecutionContext) (map[string]any, error) {
@@ -62,7 +64,15 @@ func (HttpExecutor) Execute(ctx context.Context, execution contracts.ExecutionCo
 	}
 
 	// 6. Execute Request
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	// Simulate realistic network delay for streaming demo
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(500 * time.Millisecond):
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

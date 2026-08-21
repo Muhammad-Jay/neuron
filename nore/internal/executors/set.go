@@ -7,6 +7,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 )
 
+// SetExecutor merges the service input with its configuration and returns the combination as output. It is the canonical way to assign or override values for downstream services.
 type SetExecutor struct{}
 
 func (SetExecutor) Execute(ctx context.Context, execution contracts.ExecutionContext) (map[string]any, error) {

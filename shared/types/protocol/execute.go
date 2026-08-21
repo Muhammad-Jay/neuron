@@ -7,19 +7,19 @@ import (
 )
 
 type ExecutionItem struct {
-	ID            core.ID  `json:"id"`
-	CorrelationID core.ID  `json:"correlation_id"`
-	Status        string   `json:"status"`
-	StartedAt     *int64   `json:"started_at,omitempty"`
-	CompletedAt   *int64   `json:"completed_at,omitempty"`
+	ID            core.ID `json:"id"`
+	CorrelationID core.ID `json:"correlation_id"`
+	Status        string  `json:"status"`
+	StartedAt     *int64  `json:"started_at,omitempty"`
+	CompletedAt   *int64  `json:"completed_at,omitempty"`
 	Error         string  `json:"error,omitempty"`
 }
 
 type EventItem struct {
-	ID            core.ID  `json:"id"`
-	Type          string   `json:"type"`
-	ServiceID     core.ID  `json:"service_id"`
-	Payload       any      `json:"payload"`
+	ID        core.ID `json:"id"`
+	Type      string  `json:"type"`
+	ServiceID core.ID `json:"service_id"`
+	Payload   any     `json:"payload"`
 }
 
 // StreamEvent is the canonical wire shape for both historical replay and live

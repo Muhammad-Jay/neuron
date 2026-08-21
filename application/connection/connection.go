@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,12 +15,14 @@ import (
 
 type Connection interface {
 	Do(ctx context.Context, method, path string, body any, out any) error
+	Stream(ctx context.Context, method, path string, body any, emit func([]byte) error) error
 	Health(ctx context.Context) error
 	Close() error
 }
 
 type Transport interface {
 	Do(ctx context.Context, method, path string, body any, out any) error
+	Stream(ctx context.Context, method, path string, body any, emit func([]byte) error) error
 	Close() error
 }
 
@@ -33,6 +36,10 @@ func New(transport Transport) Connection {
 
 func (c *connection) Do(ctx context.Context, method, path string, body any, out any) error {
 	return c.transport.Do(ctx, method, path, body, out)
+}
+
+func (c *connection) Stream(ctx context.Context, method, path string, body any, emit func([]byte) error) error {
+	return c.transport.Stream(ctx, method, path, body, emit)
 }
 
 func (c *connection) Health(ctx context.Context) error {
@@ -105,6 +112,63 @@ func (t *HTTPTransport) Do(ctx context.Context, method, path string, body any, o
 
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		return fmt.Errorf("decode response: %w", err)
+	}
+	return nil
+}
+
+func (t *HTTPTransport) Stream(ctx context.Context, method, path string, body any, emit func([]byte) error) error {
+	var reader io.Reader
+	if body != nil {
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("encode request: %w", err)
+		}
+		reader = strings.NewReader(string(payload))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, t.baseURL+path, reader)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("nore request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		return fmt.Errorf("nore returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+
+	// SSE line scanner: each event is "data: <json>\n\n"
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Split(bufio.ScanLines)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		// SSE data line
+		if len(line) > 6 && string(line[:6]) == "data: " {
+			if err := emit(line[6:]); err != nil {
+				return err
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("stream scan error: %w", err)
 	}
 	return nil
 }

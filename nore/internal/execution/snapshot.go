@@ -1,4 +1,4 @@
-package runtime
+package execution
 
 import (
 	"encoding/json"
@@ -8,17 +8,17 @@ import (
 )
 
 type ExecutionSnapshot struct {
-	ID            core.ID                            `json:"id"`
-	CorrelationID core.ID                            `json:"correlation_id"`
-	Status        Status                             `json:"status"`
-	InitialInput  map[string]any                     `json:"initial_input,omitempty"`
-	Inputs        map[core.ID]map[string]any         `json:"inputs,omitempty"`
-	Outputs       map[core.ID]map[string]any         `json:"outputs,omitempty"`
-	States        map[core.ID]ServiceExecutionState  `json:"states,omitempty"`
-	InFlight      int                                `json:"in_flight"`
-	StartedAt     *time.Time                         `json:"started_at,omitempty"`
-	CompletedAt   *time.Time                         `json:"completed_at,omitempty"`
-	Error         string                             `json:"error,omitempty"`
+	ID            core.ID                           `json:"id"`
+	CorrelationID core.ID                           `json:"correlation_id"`
+	Status        Status                            `json:"status"`
+	InitialInput  map[string]any                    `json:"initial_input,omitempty"`
+	Inputs        map[core.ID]map[string]any        `json:"inputs,omitempty"`
+	Outputs       map[core.ID]map[string]any        `json:"outputs,omitempty"`
+	States        map[core.ID]ServiceExecutionState `json:"states,omitempty"`
+	InFlight      int                               `json:"in_flight"`
+	StartedAt     *time.Time                        `json:"started_at,omitempty"`
+	CompletedAt   *time.Time                        `json:"completed_at,omitempty"`
+	Error         string                            `json:"error,omitempty"`
 }
 
 func (e *Execution) Snapshot() *ExecutionSnapshot {
@@ -84,6 +84,12 @@ func UnmarshalExecution(data []byte) (*Execution, error) {
 		startedAt:      snap.StartedAt,
 		completedAt:    snap.CompletedAt,
 		executionError: snap.Error,
+		done:           make(chan struct{}),
+	}
+	// Restored executions are never resumed, but a terminal snapshot must not
+	// block a Wait caller forever, so signal completion eagerly.
+	if e.IsTerminal() {
+		e.signalTerminal()
 	}
 	return e, nil
 }

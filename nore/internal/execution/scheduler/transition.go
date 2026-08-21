@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	runtimemodel "github.com/Muhammad-Jay/neuron/nore/internal/runtime"
+	exec "github.com/Muhammad-Jay/neuron/nore/internal/execution"
 	"github.com/Muhammad-Jay/neuron/nore/internal/types"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/resolver"
 )
 
-func buildTransitionEnvironment(execution *runtimemodel.Execution, sourceNode types.ExecutionNode, output map[string]any) resolver.Environment {
+func buildTransitionEnvironment(execution *exec.Execution, sourceNode types.ExecutionNode, output map[string]any) resolver.Environment {
 	service := sourceNode.Service
 	return resolver.Environment{
 		Source: map[string]any{

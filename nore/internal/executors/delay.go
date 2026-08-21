@@ -8,6 +8,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 )
 
+// DelayExecutor blocks for a configured "duration" (e.g. "5s"), honouring context cancellation.
 type DelayExecutor struct{}
 
 func (DelayExecutor) Execute(ctx context.Context, execution contracts.ExecutionContext) (map[string]any, error) {

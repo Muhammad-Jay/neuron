@@ -41,7 +41,7 @@ func (r *Registry) Resolve(serviceType core.ServiceType) (contracts.Executor, er
 	return executor, nil
 }
 
-func (r *Registry) RegisterCoreServiceExecutors()  {
+func (r *Registry) RegisterCoreServiceExecutors() {
 	must(r.Register("set", executors.SetExecutor{}))
 	must(r.Register("ai", executors.AIMockExecutor{}))
 	must(r.Register("log", executors.LogExecutor{}))

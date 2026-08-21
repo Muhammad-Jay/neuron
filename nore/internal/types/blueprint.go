@@ -32,8 +32,8 @@ type CompiledMapping struct {
 
 type CompiledValidation struct {
 	Expression string
-	Message string
-	Program resolver.Program
+	Message    string
+	Program    resolver.Program
 }
 
 type ExecutionTransition struct {

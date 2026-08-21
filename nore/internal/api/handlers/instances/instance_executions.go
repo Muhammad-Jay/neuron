@@ -1,7 +1,9 @@
 package instances
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -56,6 +58,7 @@ func (h *Handler) Execute(w http.ResponseWriter, r *http.Request) {
 
 	var body struct {
 		Input map[string]any `json:"input,omitempty"`
+		Mode  string         `json:"mode,omitempty"`
 	}
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -69,15 +72,62 @@ func (h *Handler) Execute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.WriteJSON(w, http.StatusAccepted, protocol.Response{
-		Message: "execution accepted",
-		Status:  http.StatusAccepted,
-		Data: protocol.ExecuteResponse{
+	// Detach returns as soon as the execution is accepted; the client can then
+	// follow progress through the event stream endpoint. This preserves the
+	// original behavior and is what the CLI uses to stream events live.
+	if body.Mode == "detach" {
+		utils.WriteJSON(w, http.StatusAccepted, protocol.Response{
+			Message: "execution accepted",
+			Status:  http.StatusAccepted,
+			Data: protocol.ExecuteResponse{
+				ExecutionID: execution.ID,
+				InstanceID:  i.ID,
+				Status:      string(execution.Status()),
+			},
+		})
+		return
+	}
+
+	// Wait mode (the default) blocks until the execution terminates and
+	// returns its final result, turning N.O.R.E. into a synchronous runtime
+	// for API callers. The execution itself still runs asynchronously.
+	if err := execution.Wait(r.Context()); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return // the client went away; nothing can be written
+		}
+		utils.WriteJSON(w, http.StatusOK, protocol.Response{
+			Message: "execution failed",
+			Status:  http.StatusOK,
+			Data: protocol.ExecutionResult{
+				ExecutionID: execution.ID,
+				InstanceID:  i.ID,
+				Status:      string(execution.Status()),
+				Error:       err.Error(),
+			},
+		})
+		return
+	}
+
+	utils.WriteJSON(w, http.StatusOK, protocol.Response{
+		Message: "execution completed",
+		Status:  http.StatusOK,
+		Data: protocol.ExecutionResult{
 			ExecutionID: execution.ID,
 			InstanceID:  i.ID,
 			Status:      string(execution.Status()),
+			Outputs:     stringKeyedOutputs(execution.Outputs()),
 		},
 	})
+}
+
+// stringKeyedOutputs converts a service-ID-keyed output map into the protocol's
+// string-keyed JSON shape.
+func stringKeyedOutputs(outputs map[core.ID]map[string]any) map[string]map[string]any {
+	result := make(map[string]map[string]any, len(outputs))
+	for id, output := range outputs {
+		result[string(id)] = output
+	}
+	return result
 }
 
 func (h *Handler) GetExecutionState(w http.ResponseWriter, r *http.Request) {

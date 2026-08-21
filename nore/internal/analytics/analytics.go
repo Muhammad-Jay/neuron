@@ -19,7 +19,6 @@ type Analytics struct {
 	serviceFailed    event.Subscription
 }
 
-// New 2. Inject the logger via the constructor
 func New(bus contracts.EventBus, logger *slog.Logger) (*Analytics, error) {
 	if bus == nil {
 		return nil, fmt.Errorf("event bus is required")
@@ -33,7 +32,7 @@ func New(bus contracts.EventBus, logger *slog.Logger) (*Analytics, error) {
 		return nil, err
 	}
 
-	executionFailed, err :=bus.Subscribe(event.ExecutionFailed, 64)
+	failed, err := bus.Subscribe(event.ExecutionFailed, 64)
 	if err != nil {
 		_ = started.Close()
 		return nil, err
@@ -42,11 +41,14 @@ func New(bus contracts.EventBus, logger *slog.Logger) (*Analytics, error) {
 	completed, err := bus.Subscribe(event.ServiceCompleted, 64)
 	if err != nil {
 		_ = started.Close()
+		_ = failed.Close()
 		return nil, err
 	}
-	failed, err := bus.Subscribe(event.ServiceFailed, 64)
+
+	svcFailed, err := bus.Subscribe(event.ServiceFailed, 64)
 	if err != nil {
 		_ = started.Close()
+		_ = failed.Close()
 		_ = completed.Close()
 		return nil, err
 	}
@@ -55,9 +57,9 @@ func New(bus contracts.EventBus, logger *slog.Logger) (*Analytics, error) {
 		bus:              bus,
 		logger:           logger,
 		executionStarted: started,
-		executionFailed:  executionFailed,
+		executionFailed:  failed,
 		serviceCompleted: completed,
-		serviceFailed:    failed,
+		serviceFailed:    svcFailed,
 	}, nil
 }
 
@@ -68,61 +70,62 @@ func (a *Analytics) Serve(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-
-		case received, open := <-a.executionStarted.Events():
+		case evt, open := <-a.executionStarted.Events():
 			if !open {
 				return nil
 			}
 			a.logger.Info("Execution started",
-				slog.String("execution_id", string(received.Metadata.ExecutionID)),
-				slog.String("correlation_id", string(received.Metadata.CorrelationID)),
-				slog.Time("occurred_at", received.Metadata.OccurredAt.UTC()),
+				slog.String("execution_id", string(evt.Metadata.ExecutionID)),
+				slog.String("correlation_id", string(evt.Metadata.CorrelationID)),
+				slog.Time("occurred_at", evt.Metadata.OccurredAt),
 			)
-
-		case received, open := <-a.executionFailed.Events():
+		case evt, open := <-a.executionFailed.Events():
 			if !open {
 				return nil
 			}
-
-			var errMsg string
-			switch payload := received.Payload.(type) {
+			var msg string
+			switch p := evt.Payload.(type) {
 			case event.ExecutionFailedPayload:
-				errMsg = payload.Message
+				msg = p.Message
 			case string:
-				errMsg = payload
+				msg = p
 			case fmt.Stringer:
-				errMsg = payload.String()
+				msg = p.String()
 			default:
-				errMsg = fmt.Sprintf("%v", received.Payload)
+				msg = fmt.Sprintf("%v", evt.Payload)
 			}
-
 			a.logger.Info("Execution failed",
-				slog.String("execution_id", string(received.Metadata.ExecutionID)),
-				slog.String("correlation_id", string(received.Metadata.CorrelationID)),
-				slog.String("error_message", errMsg),
-				slog.Time("occurred_at", received.Metadata.OccurredAt.UTC()),
+				slog.String("execution_id", string(evt.Metadata.ExecutionID)),
+				slog.String("correlation_id", string(evt.Metadata.CorrelationID)),
+				slog.String("message", msg),
 			)
-
-		case received, open := <-a.serviceCompleted.Events():
+		case evt, open := <-a.serviceCompleted.Events():
 			if !open {
 				return nil
 			}
 			a.logger.Info("Service completed",
-				slog.String("execution_id", string(received.Metadata.ExecutionID)),
-				slog.String("service_id", string(received.Metadata.ServiceID)),
-				slog.String("correlation_id", string(received.Metadata.CorrelationID)),
-				slog.Time("occurred_at", received.Metadata.OccurredAt.UTC()),
+				slog.String("execution_id", string(evt.Metadata.ExecutionID)),
+				slog.String("service_id", string(evt.Metadata.ServiceID)),
 			)
-
-		case received, open := <-a.serviceFailed.Events():
+		case evt, open := <-a.serviceFailed.Events():
 			if !open {
 				return nil
 			}
+			var msg string
+			switch p := evt.Payload.(type) {
+			case event.ServiceFailedPayload:
+				msg = p.Message
+			case string:
+				msg = p
+			case fmt.Stringer:
+				msg = p.String()
+			default:
+				msg = fmt.Sprintf("%v", evt.Payload)
+			}
 			a.logger.Error("Service failed",
-				slog.String("execution_id", string(received.Metadata.ExecutionID)),
-				slog.String("service_id", string(received.Metadata.ServiceID)),
-				slog.String("correlation_id", string(received.Metadata.CorrelationID)),
-				slog.Time("occurred_at", received.Metadata.OccurredAt.UTC()),
+				slog.String("execution_id", string(evt.Metadata.ExecutionID)),
+				slog.String("service_id", string(evt.Metadata.ServiceID)),
+				slog.String("message", msg),
 			)
 		}
 	}

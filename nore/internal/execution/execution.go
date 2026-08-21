@@ -1,4 +1,4 @@
-package runtime
+package execution
 
 import (
 	"errors"
@@ -18,8 +18,6 @@ const (
 	StatusCompleted Status = "completed"
 	StatusFailed    Status = "failed"
 	StatusCancelled Status = "cancelled"
-	StatusWaiting   Status = "waiting"
-	StatusPaused    Status = "paused"
 )
 
 type ServiceStatus string
@@ -33,26 +31,31 @@ const (
 )
 
 type ServiceExecutionState struct {
-	Status    ServiceStatus
-	StartedAt *time.Time
+	Status      ServiceStatus
+	StartedAt   *time.Time
 	CompletedAt *time.Time
 	Error       string
 }
 
 type Execution struct {
-	ID            shared.ID
-	CorrelationID shared.ID
-	Blueprint     *types.ExecutionBlueprint
-	mu            sync.RWMutex
-	status       Status
-	initialInput  map[string]any
-	inputs        map[shared.ID]map[string]any
-	outputs       map[shared.ID]map[string]any
-	states        map[shared.ID]ServiceExecutionState
-	inFlight      int
+	ID             shared.ID
+	CorrelationID  shared.ID
+	Blueprint      *types.ExecutionBlueprint
+	mu             sync.RWMutex
+	status         Status
+	initialInput   map[string]any
+	inputs         map[shared.ID]map[string]any
+	outputs        map[shared.ID]map[string]any
+	states         map[shared.ID]ServiceExecutionState
+	inFlight       int
 	startedAt      *time.Time
 	completedAt    *time.Time
 	executionError string
+
+	// done is closed exactly once when the execution reaches a terminal
+	// state; Wait and Done poll it. It is a runtime-only device and is not
+	// serialized in snapshots.
+	done chan struct{}
 }
 
 func NewExecution(blueprint *types.ExecutionBlueprint, correlationID shared.ID) (*Execution, error) {
@@ -70,7 +73,19 @@ func NewExecution(blueprint *types.ExecutionBlueprint, correlationID shared.ID) 
 		ID: shared.NewID("exec_"), CorrelationID: correlationID, Blueprint: blueprint,
 		status: StatusPending, initialInput: make(map[string]any),
 		inputs: make(map[shared.ID]map[string]any), outputs: make(map[shared.ID]map[string]any), states: states,
+		done: make(chan struct{}),
 	}, nil
+}
+
+// signalTerminal closes the done channel. It must be called exactly once,
+// and only by a mutator that has already transitioned the execution into a
+// terminal status (the bool-returning terminators are the sole valid callers).
+func (e *Execution) signalTerminal() {
+	select {
+	case <-e.done:
+	default:
+		close(e.done)
+	}
 }
 
 func (e *Execution) Start(initialInput map[string]any, initialServiceCount int) error {
@@ -182,6 +197,7 @@ func (e *Execution) MarkCompleted() bool {
 	now := time.Now().UTC()
 	e.status = StatusCompleted
 	e.completedAt = &now
+	e.signalTerminal()
 	return true
 }
 
@@ -197,6 +213,7 @@ func (e *Execution) MarkFailed(err error) bool {
 	if err != nil {
 		e.executionError = err.Error()
 	}
+	e.signalTerminal()
 	return true
 }
 

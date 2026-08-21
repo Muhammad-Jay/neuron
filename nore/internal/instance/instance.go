@@ -9,14 +9,13 @@ import (
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/analytics"
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
-	"github.com/Muhammad-Jay/neuron/nore/internal/engine"
 	"github.com/Muhammad-Jay/neuron/nore/internal/event"
 	"github.com/Muhammad-Jay/neuron/nore/internal/execution"
+	"github.com/Muhammad-Jay/neuron/nore/internal/execution/engine"
+	"github.com/Muhammad-Jay/neuron/nore/internal/execution/scheduler"
 	"github.com/Muhammad-Jay/neuron/nore/internal/planner"
 	"github.com/Muhammad-Jay/neuron/nore/internal/registry"
 	"github.com/Muhammad-Jay/neuron/nore/internal/resolver"
-	"github.com/Muhammad-Jay/neuron/nore/internal/runtime"
-	"github.com/Muhammad-Jay/neuron/nore/internal/scheduler"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/nore/internal/stream"
 	"github.com/Muhammad-Jay/neuron/nore/internal/types"
@@ -163,12 +162,14 @@ func (i *Instance) Start() error {
 		i.mu.Unlock()
 		return fmt.Errorf("instance %s cannot start from %s", i.ID, status)
 	}
-	i.status = StatusRunning
-	i.mu.Unlock()
 
 	if i.scheduler == nil || i.engine == nil {
+		i.mu.Unlock()
 		return fmt.Errorf("instance %s has no runtime; it was restored from metadata", i.ID)
 	}
+
+	i.status = StatusRunning
+	i.mu.Unlock()
 
 	i.wg.Add(5)
 
@@ -249,12 +250,12 @@ func (i *Instance) EventStore() *event.Store {
 	return i.eventStore
 }
 
-func (i *Instance) Execute(ctx context.Context, input map[string]any) (*runtime.Execution, error) {
+func (i *Instance) Execute(ctx context.Context, input map[string]any) (*execution.Execution, error) {
 	if i.Status() != StatusRunning {
 		return nil, fmt.Errorf("instance %s is not running", i.ID)
 	}
 
-	exec, err := runtime.NewExecution(i.Blueprint, shared.NewID("request_"))
+	exec, err := execution.NewExecution(i.Blueprint, shared.NewID("request_"))
 	if err != nil {
 		return nil, err
 	}
@@ -278,11 +279,11 @@ func (i *Instance) Execute(ctx context.Context, input map[string]any) (*runtime.
 	return exec, nil
 }
 
-func (i *Instance) ListExecutions() []*runtime.Execution {
+func (i *Instance) ListExecutions() []*execution.Execution {
 	return i.store.List()
 }
 
-func (i *Instance) GetExecution(id shared.ID) (*runtime.Execution, bool) {
+func (i *Instance) GetExecution(id shared.ID) (*execution.Execution, bool) {
 	return i.store.Get(id)
 }
 

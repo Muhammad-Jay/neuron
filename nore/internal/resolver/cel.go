@@ -35,8 +35,8 @@ func DefaultCELConfig() CELConfig {
 
 type celCompiler struct {
 	transitionEnv *cel.Env
-	serviceEnv *cel.Env
-	config     CELConfig
+	serviceEnv    *cel.Env
+	config        CELConfig
 }
 
 type celExpression struct {

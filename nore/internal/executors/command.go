@@ -11,6 +11,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 )
 
+// CommandExecutor runs a local command and returns stdout/stderr/exit_code. It is cancelled automatically when the execution context ends.
 type CommandExecutor struct{}
 
 func (CommandExecutor) Execute(ctx context.Context, execution contracts.ExecutionContext) (map[string]any, error) {

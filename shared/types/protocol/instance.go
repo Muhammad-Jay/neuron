@@ -10,10 +10,12 @@ import (
 )
 
 const (
-	HealthPath    = "/health"
-	InstancesPath = "/v1/instances"
-	InstanceByIDPath = "/v1/instances/%s"
-	ExecutePath   = "/v1/instances/%s/executions"
+	HealthPath                = "/health"
+	InstancesPath             = "/v1/instances"
+	InstanceByIDPath          = "/v1/instances/%s"
+	ExecutePath               = "/v1/instances/%s/executions"
+	ExecutionEventsPath       = "/v1/instances/%s/executions/%s/events"
+	ExecutionEventsStreamPath = "/v1/instances/%s/executions/%s/events/stream"
 )
 
 type InstanceKey struct {
@@ -33,23 +35,39 @@ type CreateInstanceRequest struct {
 }
 
 type InstanceResponse struct {
-	ID       string `json:"id"`
-	BlueprintMetadata     core.Metadata `json:"blueprint_metadata"`
-	Status   string `json:"status"`
-	SystemID string `json:"system_id"`
-	Version  string `json:"version,omitempty"`
-	Hash     string `json:"hash,omitempty"`
-	Env      string `json:"env,omitempty"`
+	ID                string        `json:"id"`
+	BlueprintMetadata core.Metadata `json:"blueprint_metadata"`
+	Status            string        `json:"status"`
+	SystemID          string        `json:"system_id"`
+	Version           string        `json:"version,omitempty"`
+	Hash              string        `json:"hash,omitempty"`
+	Env               string        `json:"env,omitempty"`
 }
 
 type ExecuteRequest struct {
+	// Input is the free-form data passed to the execution's entry services.
 	Input map[string]any `json:"input,omitempty"`
+	// Mode selects how the server responds. "detach" returns immediately with
+	// the execution accepted (HTTP 202); anything else (empty or "wait") waits
+	// for the execution to finish and returns its final result (HTTP 200).
+	Mode string `json:"mode,omitempty"`
 }
 
 type ExecuteResponse struct {
 	ExecutionID core.ID `json:"execution_id"`
-	InstanceID  string `json:"instance_id"`
-	Status      string `json:"status"`
+	InstanceID  string  `json:"instance_id"`
+	Status      string  `json:"status"`
+}
+
+// ExecutionResult is returned by a wait-mode Execute request once the
+// execution has reached a terminal state. Outputs aggregates every service
+// output keyed by service ID.
+type ExecutionResult struct {
+	ExecutionID core.ID                   `json:"execution_id"`
+	InstanceID  string                    `json:"instance_id"`
+	Status      string                    `json:"status"`
+	Error       string                    `json:"error,omitempty"`
+	Outputs     map[string]map[string]any `json:"outputs,omitempty"`
 }
 
 func HashBlueprint(value any) (string, error) {
