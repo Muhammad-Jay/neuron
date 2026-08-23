@@ -1,0 +1,20 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: reserve-to-shipment
+  version: 1.0.0
+  description: Items reserved, proceed to shipment creation
+
+from: reserve-items
+to: create-shipment
+
+mappings:
+  - target: order
+    expression: "input.parsed_order"
+  - target: shipping_address
+    expression: "input.customer_data.shipping_address"
+
+validations:
+  - expression: "source.output.reservation.status == 'confirmed'"
+    message: "Inventory reservation failed"

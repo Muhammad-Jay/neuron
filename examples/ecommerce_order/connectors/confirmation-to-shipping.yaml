@@ -1,0 +1,22 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: confirmation-to-shipping
+  version: 1.0.0
+  description: Flow from order confirmation to shipping notification
+
+from: send-confirmation
+to: send-shipping-update
+
+mappings:
+  - target: to
+    expression: "source.output.customer_data.email"
+  - target: tracking_number
+    expression: "source.output.shipment.tracking_number"
+  - target: carrier
+    expression: "source.output.shipment.carrier"
+
+validations:
+  - expression: "source.output.confirmation_email.sent == true"
+    message: "Order confirmation not sent"

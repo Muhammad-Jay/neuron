@@ -1,0 +1,36 @@
+# nonk8s
+apiVersion: neuron/v1
+kind: System
+
+metadata:
+  name: deploy
+  version: 1.0.0
+  description: CI/CD deployment pipeline
+
+services:
+  - ref: checkout
+    entry: ../../services/source/checkout.yaml
+  - ref: lint
+    entry: ../../services/source/lint.yaml
+  - ref: compile
+    entry: ../../services/build/compile.yaml
+  - ref: test
+    entry: ../../services/build/test.yaml
+  - ref: build-image
+    entry: ../../services/build/build-image.yaml
+  - ref: deploy-staging
+    entry: ../../services/deploy/staging.yaml
+  - ref: deploy-production
+    entry: ../../services/deploy/production.yaml
+  - ref: notify-slack
+    entry: ../../services/notify/slack.yaml
+  - ref: notify-email
+    entry: ../../services/notify/email.yaml
+
+connectors:
+  - entry: ../../connectors/source-to-build.yaml
+  - entry: ../../connectors/build-to-deploy.yaml
+  - entry: ../../connectors/deploy-to-notify.yaml
+
+config:
+  environment: ${environment}

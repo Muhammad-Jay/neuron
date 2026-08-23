@@ -1,0 +1,42 @@
+# nonk8s
+apiVersion: neuron/v1
+kind: Project
+
+metadata:
+  name: order-processing
+  version: 1.0.0
+  description: Complete order processing pipeline
+
+variables:
+  environment: development
+  api:
+    base_url: https://api.example.com
+    timeout: 30s
+  payment:
+    provider: stripe
+    webhook_secret: ${env.STRIPE_WEBHOOK_SECRET}
+
+systems:
+  entry: ./systems/order-processing/system.yaml
+
+runtime:
+  execution:
+    defaultMode: wait
+    timeout: 60s
+  workers:
+    min: 2
+    max: 8
+
+storage:
+  provider: local
+  local:
+    directory: ./.neuron/data
+
+executors:
+  sources:
+    - type: builtin
+      name: neuron
+
+inspector:
+  enabled: true
+  address: 127.0.0.1:7433

@@ -19,6 +19,11 @@ type ProjectFile struct {
 
 	Metadata ProjectMetadata `yaml:"metadata"`
 
+	// Variables are project-level configuration values that can be
+	// referenced in service configs, mappings, and validations using
+	// ${variable.name} syntax.
+	Variables map[string]any `yaml:"variables,omitempty"`
+
 	System SystemReference `yaml:"systems"`
 
 	Runtime   RuntimeConfig   `yaml:"runtime,omitempty"`
@@ -67,11 +72,52 @@ type SystemFile struct {
 
 	Services []ServiceReference `yaml:"services,omitempty"`
 
+	// Connectors define the data flow between services.
+	// Can be defined inline or referenced via entry.
+	Connectors []ConnectorReference `yaml:"connectors,omitempty"`
+
 	// Arbitrary systems-level configuration.
 	//
 	// This intentionally remains generic because the project
 	// resolver should not dictate N.O.R.E.'s internal model.
 	Config map[string]any `yaml:"config,omitempty"`
+}
+
+// ConnectorValidationRule describes a validation rule for a connector transition.
+type ConnectorValidationRule struct {
+	Expression string `yaml:"expression"`
+	Message    string `yaml:"message,omitempty"`
+}
+
+// ConnectorReference references a connector definition (inline or via entry).
+type ConnectorReference struct {
+	// Inline definition
+	From        string                   `yaml:"from"`
+	To          string                   `yaml:"to"`
+	Mappings    []MappingDefinition      `yaml:"mappings,omitempty"`
+	Validations []ConnectorValidationRule `yaml:"validations,omitempty"`
+
+	// External reference
+	Entry string `yaml:"entry,omitempty"`
+}
+
+// ConnectorFile represents a standalone connector definition.
+type ConnectorFile struct {
+	APIVersion string `yaml:"apiVersion"`
+	Kind       string `yaml:"kind"` // "Connector"
+
+	Metadata ConnectorMetadata `yaml:"metadata"`
+
+	From        string                   `yaml:"from"`
+	To          string                   `yaml:"to"`
+	Mappings    []MappingDefinition      `yaml:"mappings,omitempty"`
+	Validations []ConnectorValidationRule `yaml:"validations,omitempty"`
+}
+
+type ConnectorMetadata struct {
+	Name        string `yaml:"name"`
+	Version     string `yaml:"version"`
+	Description string `yaml:"description,omitempty"`
 }
 
 // SystemMetadata identifies a System.

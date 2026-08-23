@@ -68,7 +68,12 @@ func SaveResolved(
 		)
 	}
 
-	defer os.RemoveAll(tempDir)
+	defer func(path string) {
+		err := os.RemoveAll(path)
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+	}(tempDir)
 
 	projectData, err := json.MarshalIndent(
 		project,

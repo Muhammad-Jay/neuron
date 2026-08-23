@@ -1,0 +1,22 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: pricing-to-payment
+  version: 1.0.0
+  description: Flow from pricing to payment authorization
+
+from: calculate-tax
+to: authorize-payment
+
+mappings:
+  - target: amount
+    expression: "int(source.output.grand_total * 100)"
+  - target: currency
+    expression: "config.currency"
+  - target: customer
+    expression: "source.output.customer_data.email"
+
+validations:
+  - expression: "source.output.grand_total > 0"
+    message: "Grand total must be positive"

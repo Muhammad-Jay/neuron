@@ -1,6 +1,6 @@
 {
   "formatVersion": "v1",
-  "resolvedAt": "2026-08-22T15:08:43.360209453Z",
+  "resolvedAt": "2026-08-23T16:40:05.371686906Z",
   "project": {
     "APIVersion": "neuron/v1",
     "Kind": "Project",
@@ -215,16 +215,6 @@
   ],
   "sourceFiles": [
     {
-      "path": "systems/customer/system.yaml",
-      "kind": "System",
-      "sha256": "779a446ba9eea6516431c850d7c6c5655928940a96879434c8f0c312bf09ef7c"
-    },
-    {
-      "path": "services/customer/validate.yaml",
-      "kind": "Service",
-      "sha256": "2215d1eda940304f65a37760a398efddc4ced558aeba690d21c3b0935421ab32"
-    },
-    {
       "path": "services/github/read.yaml",
       "kind": "Service",
       "sha256": "8ed65f5836f4e4f1ad5e0b7d032121f50282d0a70fab9bef44875c0a387cd5d8"
@@ -233,6 +223,16 @@
       "path": "neuron.yaml",
       "kind": "Project",
       "sha256": "59413ecc1b4b59fac48c87318bb2bf824104113b60045db7c96b7b5c2e615f47"
+    },
+    {
+      "path": "systems/customer/system.yaml",
+      "kind": "System",
+      "sha256": "779a446ba9eea6516431c850d7c6c5655928940a96879434c8f0c312bf09ef7c"
+    },
+    {
+      "path": "services/customer/validate.yaml",
+      "kind": "Service",
+      "sha256": "2215d1eda940304f65a37760a398efddc4ced558aeba690d21c3b0935421ab32"
     }
   ]
 }

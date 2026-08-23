@@ -1,0 +1,61 @@
+apiVersion: neuron/v1
+kind: Service
+
+metadata:
+  name: send-confirmation
+  version: 1.0.0
+  description: Send order confirmation email
+
+spec:
+  executor:
+    type: http
+    config:
+      timeout: ${api.timeout}
+
+  config:
+    url: ${api.base_url}/emails/send
+    method: POST
+    headers:
+      Content-Type: application/json
+
+  mappings:
+    - name: email-input
+      direction: input
+      source: customer_data.email
+      target: to
+      expression: "source.output.customer_data.email"
+    - name: order-input
+      direction: input
+      source: parsed_order
+      target: order
+      expression: "input.parsed_order"
+    - name: total-input
+      direction: input
+      source: grand_total
+      target: total
+      expression: "source.output.grand_total"
+    - name: email-output
+      direction: output
+      source: result
+      target: confirmation_email
+      expression: "source.output"
+
+  validation:
+    input:
+      type: object
+      required:
+        - to
+        - order
+        - total
+    output:
+      type: object
+      properties:
+        sent:
+          type: boolean
+        message_id:
+          type: string
+
+  execution:
+    mode: wait
+    timeout: 10s
+    retries: 2

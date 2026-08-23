@@ -1,0 +1,18 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: capture-to-check-stock
+  version: 1.0.0
+  description: Payment captured, proceed to inventory check
+
+from: capture-payment
+to: check-stock
+
+mappings:
+  - target: items
+    expression: "input.parsed_order.items"
+
+validations:
+  - expression: "source.output.capture_result.status == 'succeeded'"
+    message: "Payment capture failed"

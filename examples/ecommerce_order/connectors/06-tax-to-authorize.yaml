@@ -1,0 +1,22 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: tax-to-authorize
+  version: 1.0.0
+  description: Grand total flows into payment authorization
+
+from: calculate-tax
+to: authorize-payment
+
+mappings:
+  - target: amount
+    expression: "int(source.output.grand_total * 100)"
+  - target: currency
+    expression: "'USD'"
+  - target: customer
+    expression: "input.customer_data.email"
+
+validations:
+  - expression: "source.output.grand_total > 0"
+    message: "Grand total must be positive"

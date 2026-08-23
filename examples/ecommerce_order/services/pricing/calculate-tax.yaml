@@ -1,0 +1,74 @@
+apiVersion: neuron/v1
+kind: Service
+
+metadata:
+  name: calculate-tax
+  version: 1.0.0
+  description: Calculate tax based on shipping address
+
+spec:
+  executor:
+    type: command
+
+  config:
+    command: python3
+    args:
+      - -c
+      - |
+        import json, sys
+        data = json.loads(sys.argv[1])
+        total = data['total_after_discount']
+        state = data['shipping_address']['state']
+        tax_rates = {'CA': 0.0825, 'NY': 0.08, 'TX': 0.0625, 'FL': 0.06}
+        rate = tax_rates.get(state, 0.05)
+        tax = total * rate
+        grand_total = total + tax
+        print(json.dumps({"tax": tax, "grand_total": grand_total, "tax_rate": rate}))
+
+  mappings:
+    - name: total-input
+      direction: input
+      source: total_after_discount
+      target: total_after_discount
+      expression: "source.output.total_after_discount"
+    - name: address-input
+      direction: input
+      source: customer_data.shipping_address
+      target: shipping_address
+      expression: "source.output.customer_data.shipping_address"
+    - name: tax-output
+      direction: output
+      source: result
+      target: tax
+      expression: "source.output.tax"
+    - name: grand-total-output
+      direction: output
+      source: result
+      target: grand_total
+      expression: "source.output.grand_total"
+    - name: tax-rate-output
+      direction: output
+      source: result
+      target: tax_rate
+      expression: "source.output.tax_rate"
+
+  validation:
+    input:
+      type: object
+      required:
+        - total_after_discount
+        - shipping_address
+    output:
+      type: object
+      properties:
+        tax:
+          type: number
+        grand_total:
+          type: number
+        tax_rate:
+          type: number
+
+  execution:
+    mode: wait
+    timeout: 5s
+    retries: 1

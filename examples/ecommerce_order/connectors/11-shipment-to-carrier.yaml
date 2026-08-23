@@ -1,0 +1,18 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: shipment-to-carrier
+  version: 1.0.0
+  description: Shipment created, notify carrier
+
+from: create-shipment
+to: notify-carrier
+
+mappings:
+  - target: shipment
+    expression: "source.output.shipment"
+
+validations:
+  - expression: "source.output.shipment.tracking_number != null"
+    message: "Shipment tracking number is missing"

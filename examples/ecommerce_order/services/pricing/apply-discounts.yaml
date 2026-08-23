@@ -1,0 +1,71 @@
+apiVersion: neuron/v1
+kind: Service
+
+metadata:
+  name: apply-discounts
+  version: 1.0.0
+  description: Apply customer tier discounts
+
+spec:
+  executor:
+    type: command
+
+  config:
+    command: python3
+    args:
+      - -c
+      - |
+        import json, sys
+        data = json.loads(sys.argv[1])
+        subtotal = data['subtotal']
+        tier = data['tier']
+        discount = 0
+        if tier == 'gold':
+            discount = subtotal * 0.15
+        elif tier == 'silver':
+            discount = subtotal * 0.10
+        elif tier == 'bronze':
+            discount = subtotal * 0.05
+        total = subtotal - discount
+        print(json.dumps({"discount": discount, "total_after_discount": total}))
+
+  mappings:
+    - name: subtotal-input
+      direction: input
+      source: subtotal
+      target: subtotal
+      expression: "source.output.subtotal"
+    - name: tier-input
+      direction: input
+      source: customer_data.tier
+      target: tier
+      expression: "source.output.customer_data.tier"
+    - name: discount-output
+      direction: output
+      source: result
+      target: discount
+      expression: "source.output.discount"
+    - name: discounted-total-output
+      direction: output
+      source: result
+      target: total_after_discount
+      expression: "source.output.total_after_discount"
+
+  validation:
+    input:
+      type: object
+      required:
+        - subtotal
+        - tier
+    output:
+      type: object
+      properties:
+        discount:
+          type: number
+        total_after_discount:
+          type: number
+
+  execution:
+    mode: wait
+    timeout: 5s
+    retries: 1

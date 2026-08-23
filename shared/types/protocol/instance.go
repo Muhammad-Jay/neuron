@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
 )
@@ -54,9 +55,10 @@ type ExecuteRequest struct {
 }
 
 type ExecuteResponse struct {
-	ExecutionID core.ID `json:"execution_id"`
-	InstanceID  string  `json:"instance_id"`
-	Status      string  `json:"status"`
+	ExecutionID core.ID    `json:"execution_id"`
+	InstanceID  string     `json:"instance_id"`
+	Status      string     `json:"status"`
+	Time        time.Time  `json:"time"`
 }
 
 // ExecutionResult is returned by a wait-mode Execute request once the

@@ -1,0 +1,20 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: subtotal-to-discounts
+  version: 1.0.0
+  description: Subtotal flows into discount application
+
+from: calculate-subtotal
+to: apply-discounts
+
+mappings:
+  - target: subtotal
+    expression: "source.output.subtotal"
+  - target: tier
+    expression: "input.customer_data.tier"
+
+validations:
+  - expression: "source.output.subtotal > 0"
+    message: "Subtotal must be positive"

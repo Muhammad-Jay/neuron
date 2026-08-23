@@ -1,0 +1,20 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: inventory-to-fulfillment
+  version: 1.0.0
+  description: Flow from inventory reservation to fulfillment
+
+from: reserve-items
+to: create-shipment
+
+mappings:
+  - target: order
+    expression: "input.parsed_order"
+  - target: shipping_address
+    expression: "source.output.customer_data.shipping_address"
+
+validations:
+  - expression: "source.output.reservation.status == 'confirmed'"
+    message: "Inventory reservation failed"

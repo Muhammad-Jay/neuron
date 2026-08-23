@@ -1,0 +1,44 @@
+apiVersion: neuron/v1
+kind: Project
+
+metadata:
+  name: ci-cd-pipeline
+  version: 1.0.0
+  description: CI/CD deployment pipeline
+
+variables:
+  environment: development
+  git:
+    repo: https://github.com/example/app
+    branch: main
+  docker:
+    registry: docker.io
+    image: example/app
+  kubernetes:
+    namespace: production
+    cluster: prod-cluster
+
+system:
+  entry: ./systems/deploy/system.yaml
+
+runtime:
+  execution:
+    defaultMode: wait
+    timeout: 300s
+  workers:
+    min: 1
+    max: 4
+
+storage:
+  provider: local
+  local:
+    directory: ./.neuron/data
+
+executors:
+  sources:
+    - type: builtin
+      name: neuron
+
+inspector:
+  enabled: true
+  address: 127.0.0.1:7433

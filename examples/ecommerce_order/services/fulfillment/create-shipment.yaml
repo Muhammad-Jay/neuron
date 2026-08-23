@@ -1,0 +1,57 @@
+apiVersion: neuron/v1
+kind: Service
+
+metadata:
+  name: create-shipment
+  version: 1.0.0
+  description: Create shipping label
+
+spec:
+  executor:
+    type: http
+    config:
+      timeout: ${api.timeout}
+
+  config:
+    url: ${api.base_url}/shipments/create
+    method: POST
+    headers:
+      Content-Type: application/json
+
+  mappings:
+    - name: order-input
+      direction: input
+      source: parsed_order
+      target: order
+      expression: "input.parsed_order"
+    - name: address-input
+      direction: input
+      source: customer_data.shipping_address
+      target: shipping_address
+      expression: "source.output.customer_data.shipping_address"
+    - name: shipment-output
+      direction: output
+      source: result
+      target: shipment
+      expression: "source.output"
+
+  validation:
+    input:
+      type: object
+      required:
+        - order
+        - shipping_address
+    output:
+      type: object
+      properties:
+        tracking_number:
+          type: string
+        carrier:
+          type: string
+        label_url:
+          type: string
+
+  execution:
+    mode: wait
+    timeout: 10s
+    retries: 2

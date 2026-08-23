@@ -1,0 +1,53 @@
+apiVersion: neuron/v1
+kind: Service
+
+metadata:
+  name: validate-request
+  version: 1.0.0
+  description: Validate incoming order request
+
+spec:
+  executor:
+    type: http
+    config:
+      timeout: ${api.timeout}
+
+  config:
+    url: ${api.base_url}/orders/validate
+    method: POST
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer ${env.API_TOKEN}
+
+  mappings:
+    - name: request-input
+      direction: input
+      source: execution.input.order
+      target: order
+      expression: "input.order"
+    - name: validation-output
+      direction: output
+      source: result
+      target: validation_result
+      expression: "source.output"
+
+  validation:
+    input:
+      type: object
+      required:
+        - order_id
+        - customer_id
+        - items
+    output:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+
+  execution:
+    mode: wait
+    timeout: 10s
+    retries: 2
+    concurrency: 4

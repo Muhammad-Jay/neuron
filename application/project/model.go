@@ -39,7 +39,16 @@ type ResolvedProject struct {
 type ResolvedSystem struct {
 	Definition SystemFile `json:"definition"`
 
-	Services []ResolvedService `json:"services"`
+	Services   []ResolvedService   `json:"services"`
+	Connectors []ResolvedConnector `json:"connectors"`
+}
+
+// ResolvedConnector contains the original connector definition plus
+// resolution metadata.
+type ResolvedConnector struct {
+	Ref        string        `json:"ref"`
+	SourcePath string        `json:"sourcePath"`
+	Definition ConnectorFile `json:"definition"`
 }
 
 // ResolvedService contains the original service definition plus

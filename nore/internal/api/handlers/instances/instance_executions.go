@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/api/utils"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
@@ -75,7 +76,7 @@ func (h *Handler) Execute(w http.ResponseWriter, r *http.Request) {
 	// Detach returns as soon as the execution is accepted; the client can then
 	// follow progress through the event stream endpoint. This preserves the
 	// original behavior and is what the CLI uses to stream events live.
-	if body.Mode == "detach" {
+	if body.Mode == core.ExecutionModeDetach {
 		utils.WriteJSON(w, http.StatusAccepted, protocol.Response{
 			Message: "execution accepted",
 			Status:  http.StatusAccepted,
@@ -83,6 +84,7 @@ func (h *Handler) Execute(w http.ResponseWriter, r *http.Request) {
 				ExecutionID: execution.ID,
 				InstanceID:  i.ID,
 				Status:      string(execution.Status()),
+				Time:        time.Now().UTC(),
 			},
 		})
 		return

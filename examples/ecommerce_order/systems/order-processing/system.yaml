@@ -1,0 +1,52 @@
+# nonk8s
+apiVersion: neuron/v1
+kind: System
+
+metadata:
+  name: order-processing
+  version: 1.0.0
+  description: Complete order processing pipeline
+
+services:
+  - ref: validate-request
+    entry: ../../services/api/validate-request.yaml
+  - ref: parse-order
+    entry: ../../services/api/parse-order.yaml
+  - ref: enrich-customer
+    entry: ../../services/api/enrich-customer.yaml
+  - ref: calculate-subtotal
+    entry: ../../services/pricing/calculate-subtotal.yaml
+  - ref: apply-discounts
+    entry: ../../services/pricing/apply-discounts.yaml
+  - ref: calculate-tax
+    entry: ../../services/pricing/calculate-tax.yaml
+  - ref: authorize-payment
+    entry: ../../services/payment/authorize-payment.yaml
+  - ref: capture-payment
+    entry: ../../services/payment/capture-payment.yaml
+  - ref: check-stock
+    entry: ../../services/inventory/check-stock.yaml
+  - ref: reserve-items
+    entry: ../../services/inventory/reserve-items.yaml
+  - ref: create-shipment
+    entry: ../../services/fulfillment/create-shipment.yaml
+  - ref: notify-carrier
+    entry: ../../services/fulfillment/notify-carrier.yaml
+  - ref: send-confirmation
+    entry: ../../services/notifications/send-confirmation.yaml
+  - ref: send-shipping-update
+    entry: ../../services/notifications/send-shipping-update.yaml
+
+connectors:
+  - entry: ../../connectors/01-validate-to-parse.yaml
+  - entry: ../../connectors/02-parse-to-enrich.yaml
+  - entry: ../../connectors/03-enrich-to-subtotal.yaml
+  - entry: ../../connectors/04-subtotal-to-discounts.yaml
+  - entry: ../../connectors/05-discounts-to-tax.yaml
+  - entry: ../../connectors/06-tax-to-authorize.yaml
+  - entry: ../../connectors/07-authorize-to-capture.yaml
+  - entry: ../../connectors/08-capture-to-check-stock.yaml
+
+config:
+  environment: ${environment}
+  currency: USD

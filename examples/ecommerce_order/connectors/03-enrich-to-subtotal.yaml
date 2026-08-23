@@ -1,0 +1,18 @@
+apiVersion: neuron/v1
+kind: Connector
+
+metadata:
+  name: enrich-to-subtotal
+  version: 1.0.0
+  description: Enriched order flows into subtotal calculation
+
+from: enrich-customer
+to: calculate-subtotal
+
+mappings:
+  - target: items
+    expression: "input.parsed_order.items"
+
+validations:
+  - expression: "source.output.customer_data.tier != null"
+    message: "Customer tier is missing"

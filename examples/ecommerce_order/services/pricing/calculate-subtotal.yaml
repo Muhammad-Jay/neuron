@@ -1,0 +1,49 @@
+apiVersion: neuron/v1
+kind: Service
+
+metadata:
+  name: calculate-subtotal
+  version: 1.0.0
+  description: Calculate order subtotal from items
+
+spec:
+  executor:
+    type: command
+
+  config:
+    command: python3
+    args:
+      - -c
+      - |
+        import json, sys
+        items = json.loads(sys.argv[1])
+        subtotal = sum(item['price'] * item['quantity'] for item in items)
+        print(json.dumps({"subtotal": subtotal}))
+
+  mappings:
+    - name: items-input
+      direction: input
+      source: parsed_order.items
+      target: items
+      expression: "input.parsed_order.items"
+    - name: subtotal-output
+      direction: output
+      source: result
+      target: subtotal
+      expression: "source.output.subtotal"
+
+  validation:
+    input:
+      type: object
+      required:
+        - items
+    output:
+      type: object
+      properties:
+        subtotal:
+          type: number
+
+  execution:
+    mode: wait
+    timeout: 5s
+    retries: 1

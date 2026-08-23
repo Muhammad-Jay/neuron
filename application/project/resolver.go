@@ -191,6 +191,7 @@ func (r *Resolver) resolveSystem(
 	resolved := &ResolvedSystem{
 		Definition: system,
 		Services:   make([]ResolvedService, 0, len(system.Services)),
+		Connectors: make([]ResolvedConnector, 0, len(system.Connectors)),
 	}
 
 	seenRefs := make(map[string]bool)
@@ -245,7 +246,114 @@ func (r *Resolver) resolveSystem(
 		)
 	}
 
+	connectors, err := r.resolveConnectors(path, system, seenRefs)
+	if err != nil {
+		return nil, err
+	}
+	resolved.Connectors = connectors
+
 	return resolved, nil
+}
+
+func (r *Resolver) resolveConnectors(
+	systemPath string,
+	system SystemFile,
+	serviceRefs map[string]bool,
+) ([]ResolvedConnector, error) {
+	var resolved []ResolvedConnector
+
+	for _, connRef := range system.Connectors {
+		var connFile ConnectorFile
+		var sourcePath string
+
+		if connRef.Entry != "" {
+			entryPath, err := r.resolvePath(
+				filepath.Dir(systemPath),
+				connRef.Entry,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("resolve connector entry %q: %w", connRef.Entry, err)
+			}
+
+			connFile, err = r.resolveConnector(entryPath)
+			if err != nil {
+				return nil, err
+			}
+			sourcePath = displayPath(r.root, entryPath)
+
+			// Inline mappings/validations override the entry file
+			if len(connRef.Mappings) > 0 {
+				connFile.Mappings = connRef.Mappings
+			}
+			if len(connRef.Validations) > 0 {
+				connFile.Validations = connRef.Validations
+			}
+			// Inline from/to override entry file
+			if connRef.From != "" {
+				connFile.From = connRef.From
+			}
+			if connRef.To != "" {
+				connFile.To = connRef.To
+			}
+		} else {
+			// Inline connector
+			connFile = ConnectorFile{
+				APIVersion: "neuron/v1",
+				Kind:       "Connector",
+				Metadata: ConnectorMetadata{
+					Name:    fmt.Sprintf("connector-%s-to-%s", connRef.From, connRef.To),
+					Version: "1.0.0",
+				},
+				From:        connRef.From,
+				To:          connRef.To,
+				Mappings:    connRef.Mappings,
+				Validations: connRef.Validations,
+			}
+			sourcePath = displayPath(r.root, systemPath) + " (inline)"
+		}
+
+		// Validate from/to reference existing services
+		if !serviceRefs[connFile.From] {
+			return nil, fmt.Errorf("connector %q references unknown service %q", connFile.Metadata.Name, connFile.From)
+		}
+		if !serviceRefs[connFile.To] {
+			return nil, fmt.Errorf("connector %q references unknown service %q", connFile.Metadata.Name, connFile.To)
+		}
+
+		resolved = append(resolved, ResolvedConnector{
+			Ref:        connFile.Metadata.Name,
+			SourcePath: sourcePath,
+			Definition: connFile,
+		})
+	}
+
+	return resolved, nil
+}
+
+func (r *Resolver) resolveConnector(
+	path string,
+) (ConnectorFile, error) {
+
+	var conn ConnectorFile
+
+	if err := r.readYAML(path, &conn); err != nil {
+		return ConnectorFile{}, fmt.Errorf(
+			"load connector %s: %w",
+			displayPath(r.root, path),
+			err,
+		)
+	}
+
+	if err := validateConnectorFile(conn); err != nil {
+		return ConnectorFile{}, fmt.Errorf(
+			"%w: %s: %v",
+			ErrInvalidConnector,
+			displayPath(r.root, path),
+			err,
+		)
+	}
+
+	return conn, nil
 }
 
 func (r *Resolver) resolveService(

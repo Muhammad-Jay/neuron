@@ -83,11 +83,90 @@ func validateSystemBasic(
 		)
 	}
 
+	if len(system.Connectors) > 0 {
+		serviceRefs := make(map[string]bool)
+		for _, svc := range system.Services {
+			serviceRefs[svc.Ref] = true
+		}
+		for i, conn := range system.Connectors {
+			if err := validateConnectorBasic(conn, serviceRefs, i); err != nil {
+				errors = append(errors, err.Error())
+			}
+		}
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf(
 			"%s",
 			strings.Join(errors, "; "),
 		)
+	}
+
+	return nil
+}
+
+func validateConnectorBasic(
+	conn ConnectorReference,
+	serviceRefs map[string]bool,
+	index int,
+) error {
+	prefix := fmt.Sprintf("connectors[%d]", index)
+
+	if conn.Entry == "" {
+		if strings.TrimSpace(conn.From) == "" {
+			return fmt.Errorf("%s.from is required", prefix)
+		}
+		if strings.TrimSpace(conn.To) == "" {
+			return fmt.Errorf("%s.to is required", prefix)
+		}
+		if !serviceRefs[conn.From] {
+			return fmt.Errorf("%s.from references unknown service %q", prefix, conn.From)
+		}
+		if !serviceRefs[conn.To] {
+			return fmt.Errorf("%s.to references unknown service %q", prefix, conn.To)
+		}
+	}
+
+	for j, m := range conn.Mappings {
+		if strings.TrimSpace(m.Target) == "" {
+			return fmt.Errorf("%s.mappings[%d].target is required", prefix, j)
+		}
+		if strings.TrimSpace(m.Expression) == "" {
+			return fmt.Errorf("%s.mappings[%d].expression is required", prefix, j)
+		}
+	}
+
+	for j, v := range conn.Validations {
+		if strings.TrimSpace(v.Expression) == "" {
+			return fmt.Errorf("%s.validations[%d].expression is required", prefix, j)
+		}
+	}
+
+	return nil
+}
+
+// validateConnectorFile validates a ConnectorFile (for external connector files)
+func validateConnectorFile(conn ConnectorFile) error {
+	if strings.TrimSpace(conn.From) == "" {
+		return fmt.Errorf("connector.from is required")
+	}
+	if strings.TrimSpace(conn.To) == "" {
+		return fmt.Errorf("connector.to is required")
+	}
+
+	for j, m := range conn.Mappings {
+		if strings.TrimSpace(m.Target) == "" {
+			return fmt.Errorf("connector.mappings[%d].target is required", j)
+		}
+		if strings.TrimSpace(m.Expression) == "" {
+			return fmt.Errorf("connector.mappings[%d].expression is required", j)
+		}
+	}
+
+	for j, v := range conn.Validations {
+		if strings.TrimSpace(v.Expression) == "" {
+			return fmt.Errorf("connector.validations[%d].expression is required", j)
+		}
 	}
 
 	return nil
