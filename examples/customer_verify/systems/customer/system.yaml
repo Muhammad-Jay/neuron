@@ -1,0 +1,18 @@
+# nonk8s
+apiVersion: neuron/v1
+kind: System
+
+metadata:
+  name: customer
+  version: 1.0.0
+  description: Customer processing systems
+
+services:
+  - ref: customer.validate
+    entry: ../../services/customer/validate.yaml
+
+  - ref: github.read
+    entry: ../../services/github/read.yaml
+
+config:
+  environment: development

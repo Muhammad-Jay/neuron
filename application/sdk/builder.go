@@ -25,7 +25,7 @@ func NewSystem(metadata core.Metadata) *System {
 	}
 }
 
-// New creates a new system.
+// New creates a new systems.
 //
 // Example:
 //
@@ -107,7 +107,7 @@ func (s *System) Trigger(service core.Service) *System {
 // Build returns the immutable specification consumed by N.O.R.E.
 func (s *System) Build() *core.System {
 	if s == nil || s.system == nil {
-		panic("mvp: nil system")
+		panic("mvp: nil systems")
 	}
 
 	// Compile all the tracked DSL connectors right before building.
@@ -123,13 +123,13 @@ func (s *System) Build() *core.System {
 	s.dslConnectors = nil
 
 	if s.system.Metadata.Name == "" {
-		panic("mvp: system name is required")
+		panic("mvp: systems name is required")
 	}
 	if s.system.Metadata.Version == "" {
-		panic("mvp: system version is required")
+		panic("mvp: systems version is required")
 	}
 	if len(s.system.Specification.Services) == 0 {
-		panic("mvp: system must contain at least one service")
+		panic("mvp: systems must contain at least one service")
 	}
 
 	return s.system
@@ -139,7 +139,7 @@ func (s *System) MustBuild() *core.System {
 	return s.Build()
 }
 
-// Metadata allows changing system metadata without exposing core.System.
+// Metadata allows changing systems metadata without exposing core.System.
 func (s *System) Metadata(name, version string) *System {
 	s.system.Metadata.Name = name
 	s.system.Metadata.Version = version
@@ -164,16 +164,16 @@ func (s *System) Label(key, value string) *System {
 // Validate performs only DSL-level structural checks.
 func (s *System) Validate() error {
 	if s == nil || s.system == nil {
-		return fmt.Errorf("system is nil")
+		return fmt.Errorf("systems is nil")
 	}
 	if s.system.Metadata.Name == "" {
-		return fmt.Errorf("system name is required")
+		return fmt.Errorf("systems name is required")
 	}
 	if s.system.Metadata.Version == "" {
-		return fmt.Errorf("system version is required")
+		return fmt.Errorf("systems version is required")
 	}
 	if len(s.system.Specification.Services) == 0 {
-		return fmt.Errorf("system must contain at least one service")
+		return fmt.Errorf("systems must contain at least one service")
 	}
 	return nil
 }

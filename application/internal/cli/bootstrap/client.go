@@ -67,7 +67,7 @@ func NoreBinaryPath() (string, error) {
 		return customPath, nil
 	}
 
-	// 2. Check if "nore" is installed globally in the system's PATH
+	// 2. Check if "nore" is installed globally in the systems's PATH
 	if path, err := exec.LookPath("nore"); err == nil {
 		return path, nil
 	}

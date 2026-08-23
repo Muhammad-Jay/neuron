@@ -2,7 +2,7 @@ package main
 //
 //import (
 //	"context"
-//	customer_system "development/systems/customer-system"
+//	customer_system "development/systems/customer-systems"
 //	"log"
 //	"nore/analytics"
 //	"nore/resolver"

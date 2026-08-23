@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"sort"
 	"strings"
 	"time"
 
 	customersystem "development/systems/customer-system"
 
-	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/application/client"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 	"github.com/spf13/cobra"
@@ -33,7 +33,7 @@ func New() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	cmd.Flags().StringVar(&input, "input", "", "JSON input for the execution (e.g., '{\"key\":\"value\"}')")
-	cmd.Flags().BoolVar(&detach, "detach", false, "return immediately after starting execution (default: wait for completion with live event stream)")
+	cmd.Flags().BoolVar(&detach, "detach", true, "return immediately after starting execution (default: wait for completion with live event stream)")
 
 	return cmd
 }
@@ -65,26 +65,23 @@ func runCmdHandler(cmd *cobra.Command, args []string) error {
 	}
 
 	var key = protocol.InstanceKey{SystemID: string(sys.Metadata.ID)}
-	mode := "wait"
-	if detach {
-		mode = "detach"
-	}
+	mode := "detach"
 
 	result, err := c.Execute(ctx, key, sys, execInput, mode)
 	if err != nil {
 		return err
 	}
 
-	if detach {
-		fmt.Printf("Instance: %s\nExecution: %s\nStatus: %s\n", result.InstanceID, result.ExecutionID, result.Status)
-		return nil
+	if !detach {
+		// Wait mode: stream events in real-time, then show final result
+		return streamEventsAndWait(ctx, c, result.InstanceID, result.ExecutionID)
 	}
 
-	// Wait mode: stream events in real-time, then show final result
-	return streamEventsAndWait(ctx, c, result.InstanceID, result.ExecutionID, result)
+	fmt.Printf("execution ID: %s\n instance ID: %s\n status: %s\n\n", result.InstanceID, result.InstanceID, result.Status)
+	return nil
 }
 
-func streamEventsAndWait(ctx context.Context, c *client.Client, instanceID string, executionID core.ID, finalResult protocol.ExecutionResult) error {
+func streamEventsAndWait(ctx context.Context, c *client.Client, instanceID string, executionID core.ID) error {
 	eventCh := make(chan protocol.StreamEvent, 64)
 	errCh := make(chan error, 1)
 
@@ -116,7 +113,6 @@ func streamEventsAndWait(ctx context.Context, c *client.Client, instanceID strin
 		}
 	}
 
-	printFinalResult(finalResult)
 	return nil
 }
 
@@ -126,37 +122,123 @@ func printEvent(evt protocol.StreamEvent) {
 		ts = formatTime(evt.OccurredAt)
 	}
 
-	eventType := evt.Type
+	colorReset := "\033[94m"
+	colorDim := "\033[36m"
+	colorSvc := "\033[35m"
+
+	colorEvt := "\033[36m"
+	if strings.HasSuffix(evt.Type, ".completed") {
+		colorEvt = "\033[32m"
+	} else if strings.HasSuffix(evt.Type, ".failed") {
+		colorEvt = "\033[31m"
+	} else if strings.HasSuffix(evt.Type, ".log") {
+		colorEvt = "\033[33m"
+	}
+
 	svc := ""
 	if evt.ServiceID != "" {
-		svc = fmt.Sprintf(" [%s]", evt.ServiceID)
+		svc = fmt.Sprintf(" %s[%s]%s", colorSvc, evt.ServiceID, colorReset)
 	}
 
-	payloadStr := ""
-	if len(evt.Payload) > 0 {
-		var payload map[string]any
-		if err := json.Unmarshal(evt.Payload, &payload); err == nil {
-			if msg, ok := payload["message"].(string); ok {
-				payloadStr = " " + msg
-			} else if prompt, ok := payload["prompt"].(string); ok {
-				payloadStr = " " + prompt
+	// Print the event header
+	fmt.Printf("\n%s[%s]%s %s%s%s%s\n", colorDim, ts, colorReset, colorEvt, evt.Type, colorReset, svc)
+
+	if len(evt.Payload) == 0 {
+		return
+	}
+
+	isLog := evt.Type == "service.log"
+
+	// Skip rendering non-log payloads unless verbose is enabled
+	if !verbose && !isLog {
+		return
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(evt.Payload, &payload); err == nil && len(payload) > 0 {
+		// Special formatting specifically for service.log
+		if isLog {
+			level, _ := payload["Level"].(string)
+			msg, _ := payload["Message"].(string)
+			if level == "" {
+				level = "info"
 			}
+
+			// Print the core log message neatly
+			fmt.Printf("  \033[36m[%s]\033[0m %s\n", level, msg)
+
+			// Transform the Fields array (Key/Value objects) into clean key: value rendering
+			if fields, ok := payload["Fields"].([]any); ok {
+				for _, f := range fields {
+					if fm, isMap := f.(map[string]any); isMap {
+						if k, hasKey := fm["Key"].(string); hasKey {
+							printNode("  ", k, fm["Value"])
+						}
+					}
+				}
+			}
+			return
+		}
+
+		// Standard payload formatting (only hits this if verbose == true)
+		keys := make([]string, 0, len(payload))
+		for k := range payload {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			printNode("  ", k, payload[k])
 		}
 	}
-
-	fmt.Printf("[%s] %s%s%s\n", ts, eventType, svc, payloadStr)
 }
 
-func printFinalResult(result protocol.ExecutionResult) {
-	fmt.Printf("\nExecution completed: %s\n", result.ExecutionID)
-	fmt.Printf("Status: %s\n", result.Status)
-	if result.Error != "" {
-		fmt.Printf("Error: %s\n", result.Error)
-		os.Exit(1)
-	}
-	if len(result.Outputs) > 0 {
-		for svcID, out := range result.Outputs {
-			fmt.Printf("Service %s output: %v\n", svcID, out)
+func printNode(indent string, key string, val any) {
+	keyColor := "\033[94m" // Light blue
+	reset := "\033[0m"
+
+	switch v := val.(type) {
+	case map[string]any:
+		if len(v) == 0 {
+			fmt.Printf("%s%s%s%s: {}\n", indent, keyColor, key, reset)
+			return
+		}
+		fmt.Printf("%s%s%s%s:\n", indent, keyColor, key, reset)
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			printNode(indent+"  ", k, v[k])
+		}
+	case []any:
+		if len(v) == 0 {
+			fmt.Printf("%s%s%s%s: []\n", indent, keyColor, key, reset)
+			return
+		}
+		fmt.Printf("%s%s%s%s:\n", indent, keyColor, key, reset)
+		for i, item := range v {
+			printNode(indent+"  ", fmt.Sprintf("[%d]", i), item)
+		}
+	case string:
+		if strings.Contains(v, "\n") {
+			fmt.Printf("%s%s%s%s: |\n", indent, keyColor, key, reset)
+			lines := strings.Split(strings.TrimSpace(v), "\n")
+			for _, line := range lines {
+				if line == "" {
+					fmt.Println(indent + "  ") // Preserve blank lines cleanly
+				} else {
+					fmt.Printf("%s  %s\n", indent, line)
+				}
+			}
+		} else {
+			fmt.Printf("%s%s%s%s: %s\n", indent, keyColor, key, reset, v)
+		}
+	default:
+		if v == nil {
+			fmt.Printf("%s%s%s%s: null\n", indent, keyColor, key, reset)
+		} else {
+			fmt.Printf("%s%s%s%s: %v\n", indent, keyColor, key, reset, v)
 		}
 	}
 }

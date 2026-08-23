@@ -32,7 +32,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./neuron.yaml)")
-	RootCmd.PersistentFlags().String("log-level", "info", "Set the system logging level")
+	RootCmd.PersistentFlags().String("log-level", "info", "Set the systems logging level")
 
 	// Add global verbose and remote flags
 	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output (shows N.O.R.E. daemon logs)")

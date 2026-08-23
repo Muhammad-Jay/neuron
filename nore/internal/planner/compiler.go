@@ -37,7 +37,7 @@ func (c *Compiler) Compile(system shared.System) (*types.ExecutionBlueprint, err
 		}
 	}
 	if len(services) == 0 {
-		return nil, fmt.Errorf("system must contain at least one service")
+		return nil, fmt.Errorf("systems must contain at least one service")
 	}
 
 	nodes := make(map[shared.ID]types.ExecutionNode, len(services))
@@ -91,7 +91,7 @@ func (c *Compiler) Compile(system shared.System) (*types.ExecutionBlueprint, err
 		}
 	}
 	if len(entryIDs) == 0 {
-		return nil, fmt.Errorf("system has no entry service")
+		return nil, fmt.Errorf("systems has no entry service")
 	}
 	if err := validateAcyclic(nodes, incoming); err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func validateAcyclic(nodes map[shared.ID]types.ExecutionNode, incoming map[share
 		}
 	}
 	if visited != len(nodes) {
-		return fmt.Errorf("system contains a connector cycle")
+		return fmt.Errorf("systems contains a connector cycle")
 	}
 	return nil
 }
@@ -222,7 +222,7 @@ func validateReachability(nodes map[shared.ID]types.ExecutionNode, entries []sha
 		}
 	}
 	if len(visited) != len(nodes) {
-		return fmt.Errorf("system contains unreachable services")
+		return fmt.Errorf("systems contains unreachable services")
 	}
 	return nil
 }

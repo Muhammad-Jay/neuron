@@ -107,7 +107,7 @@ func New(
 	if err != nil {
 		cancel()
 		bus.Close()
-		return nil, fmt.Errorf("compile system: %w", err)
+		return nil, fmt.Errorf("compile systems: %w", err)
 	}
 
 	execEngine, err := engine.NewExecutorEngine(bus, reg, store, workers)
@@ -292,8 +292,8 @@ func (i *Instance) ListExecutionEvents(ctx context.Context, executionID shared.I
 }
 
 // Events composes persisted history with live bus events for the execution.
-func (i *Instance) Events(ctx context.Context, executionID shared.ID, after shared.ID) (<-chan stream.Message, error) {
-	return stream.Subscribe(ctx, i.bus, i.eventStore, executionID, after)
+func (i *Instance) Events(ctx context.Context, eventID shared.ID, after shared.ID) (<-chan stream.Message, error) {
+	return stream.Subscribe(ctx, i.bus, i.eventStore, eventID, after)
 }
 
 func (i *Instance) persistEvents(ctx context.Context) {

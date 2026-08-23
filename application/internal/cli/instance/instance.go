@@ -11,8 +11,8 @@ var instanceID string
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "instance",
-		Short: "Manage N.O.R.E. system instances",
-		Long:  `Create, list, and manage running system instances.`,
+		Short: "Manage N.O.R.E. systems instances",
+		Long:  `Create, list, and manage running systems instances.`,
 		// If the user runs 'neuron instance' without a subcommand, show the help menu.
 		RunE: func(cmd *cobra.Command, args []string) error {
 			//if len(args) == 0 {

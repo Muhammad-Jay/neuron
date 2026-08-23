@@ -6,7 +6,7 @@ const NeuronConfigDefaultTemplate = `log_level: "debug"
 build:
   watch: true
 
-system:
+systems:
   metadata: $
   version: 0.0.1
 `

@@ -10,7 +10,7 @@ import (
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build",
-		Short: "Build the neuron system",
+		Short: "Build the neuron systems",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// 1. Read values strictly from Viper, not from flag variables!
 			logLevel := viper.GetString("log_level")

@@ -31,7 +31,7 @@ func (k InstanceKey) String() string {
 
 type CreateInstanceRequest struct {
 	Key    InstanceKey  `json:"key"`
-	System *core.System `json:"system"`
+	System *core.System `json:"systems"`
 }
 
 type InstanceResponse struct {

@@ -18,6 +18,11 @@ func (h *Handler) StreamExecutionEvents(w http.ResponseWriter, r *http.Request) 
 	instID := utils.PathID(r.PathValue("id"))
 	execID := core.ID(utils.PathID(r.PathValue("execID")))
 
+	if instID == "" || execID == "" {
+		utils.ErrorJSON(w, http.StatusNotImplemented, fmt.Errorf("missing instance id or exec id"))
+		return
+	}
+
 	i, ok := h.instances.GetByID(instID)
 	if !ok {
 		utils.ErrorJSON(w, http.StatusNotFound, fmt.Errorf("instance %s not found", instID))

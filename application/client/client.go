@@ -46,7 +46,7 @@ func (c *Client) Health(ctx context.Context) error {
 	return c.conn.Health(ctx)
 }
 
-// ListInstances retrieves all currently registered system instances from the server.
+// ListInstances retrieves all currently registered systems instances from the server.
 func (c *Client) ListInstances(ctx context.Context, queryPath string) ([]protocol.InstanceResponse, error) {
 	var response struct {
 		Data []protocol.InstanceResponse `json:"data"`
@@ -67,11 +67,11 @@ func (c *Client) ListInstances(ctx context.Context, queryPath string) ([]protoco
 	return response.Data, nil
 }
 
-// EnsureInstance verifies the existence of a system instance by its key,
+// EnsureInstance verifies the existence of a systems instance by its key,
 // creating a new instance on the server if it does not already exist.
 func (c *Client) EnsureInstance(ctx context.Context, key protocol.InstanceKey, system *core.System) (protocol.InstanceResponse, error) {
 	if system == nil {
-		return protocol.InstanceResponse{}, fmt.Errorf("system is required")
+		return protocol.InstanceResponse{}, fmt.Errorf("systems is required")
 	}
 
 	var response struct {
@@ -138,10 +138,6 @@ func (c *Client) Execute(ctx context.Context, instanceKey protocol.InstanceKey, 
 // ends or the context is cancelled.
 func (c *Client) StreamExecutionEvents(ctx context.Context, instanceID string, executionID core.ID, emit func(protocol.StreamEvent) error) error {
 	endpoint := fmt.Sprintf(protocol.ExecutionEventsStreamPath, instanceID, executionID)
-
-	//var response struct {
-	//	Data protocol.StreamEvent `json:"data"`
-	//}
 
 	return c.conn.Stream(ctx, http.MethodGet, endpoint, nil, func(data []byte) error {
 		var evt protocol.StreamEvent

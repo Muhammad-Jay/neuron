@@ -4,7 +4,7 @@ package main
 //
 //func buildSystem() types.System {
 //	return types.System{
-//		Metadata: types.Metadata{ID: "welcome-system", Name: "Customer Welcome Email", Version: "1"},
+//		Metadata: types.Metadata{ID: "welcome-systems", Name: "Customer Welcome Email", Version: "1"},
 //		Specification: types.SystemSpec{
 //			Services: []types.Service{
 //				{
@@ -58,7 +58,7 @@ package main
 //func buildMonitoringSystem() types.System {
 //	return types.System{
 //		Metadata: types.Metadata{
-//			ID:      "api-monitor-system",
+//			ID:      "api-monitor-systems",
 //			Name:    "API Health Monitor & AI Alert",
 //			Version: "1",
 //		},

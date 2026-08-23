@@ -23,7 +23,7 @@ func (h *Handler) CreateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.System == nil {
-		utils.ErrorJSON(w, http.StatusBadRequest, fmt.Errorf("system is required"))
+		utils.ErrorJSON(w, http.StatusBadRequest, fmt.Errorf("systems is required"))
 		return
 	}
 
