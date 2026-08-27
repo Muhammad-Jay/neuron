@@ -1,24 +1,20 @@
 {
   "formatVersion": "v1",
-  "resolvedAt": "2026-08-23T21:26:37.892550602Z",
+  "resolvedAt": "2026-08-26T09:16:59.426786461Z",
   "project": {
     "APIVersion": "neuron/v1",
     "Kind": "Project",
     "Metadata": {
       "Name": "order-processing",
       "Version": "1.0.0",
-      "Description": "Complete order processing pipeline"
+      "Description": "Order processing pipeline"
     },
     "Variables": {
       "api": {
         "base_url": "https://api.example.com",
-        "timeout": "30s"
+        "timeout": "10s"
       },
-      "environment": "development",
-      "payment": {
-        "provider": "stripe",
-        "webhook_secret": "${env.STRIPE_WEBHOOK_SECRET}"
-      }
+      "environment": "development"
     },
     "System": {
       "Entry": "./systems/order-processing/system.yaml"
@@ -26,7 +22,7 @@
     "Runtime": {
       "Execution": {
         "DefaultMode": "wait",
-        "Timeout": "60s"
+        "Timeout": "120s"
       },
       "Workers": {
         "Min": 2,
@@ -65,202 +61,278 @@
       "Metadata": {
         "Name": "order-processing",
         "Version": "1.0.0",
-        "Description": "Complete order processing pipeline"
+        "Description": "Order processing pipeline"
       },
       "Entry": "",
       "Services": [
         {
-          "Ref": "validate-request",
-          "Entry": "../../services/api/validate-request.yaml"
+          "Ref": "validate-order",
+          "Entry": "../../services/validate-order.yaml"
         },
         {
           "Ref": "parse-order",
-          "Entry": "../../services/api/parse-order.yaml"
+          "Entry": "../../services/parse-order.yaml"
         },
         {
           "Ref": "enrich-customer",
-          "Entry": "../../services/api/enrich-customer.yaml"
+          "Entry": "../../services/enrich-customer.yaml"
         },
         {
-          "Ref": "calculate-subtotal",
-          "Entry": "../../services/pricing/calculate-subtotal.yaml"
-        },
-        {
-          "Ref": "apply-discounts",
-          "Entry": "../../services/pricing/apply-discounts.yaml"
-        },
-        {
-          "Ref": "calculate-tax",
-          "Entry": "../../services/pricing/calculate-tax.yaml"
+          "Ref": "calculate-totals",
+          "Entry": "../../services/calculate-totals.yaml"
         },
         {
           "Ref": "authorize-payment",
-          "Entry": "../../services/payment/authorize-payment.yaml"
+          "Entry": "../../services/authorize-payment.yaml"
         },
         {
           "Ref": "capture-payment",
-          "Entry": "../../services/payment/capture-payment.yaml"
-        },
-        {
-          "Ref": "check-stock",
-          "Entry": "../../services/inventory/check-stock.yaml"
-        },
-        {
-          "Ref": "reserve-items",
-          "Entry": "../../services/inventory/reserve-items.yaml"
+          "Entry": "../../services/capture-payment.yaml"
         },
         {
           "Ref": "create-shipment",
-          "Entry": "../../services/fulfillment/create-shipment.yaml"
-        },
-        {
-          "Ref": "notify-carrier",
-          "Entry": "../../services/fulfillment/notify-carrier.yaml"
+          "Entry": "../../services/create-shipment.yaml"
         },
         {
           "Ref": "send-confirmation",
-          "Entry": "../../services/notifications/send-confirmation.yaml"
-        },
-        {
-          "Ref": "send-shipping-update",
-          "Entry": "../../services/notifications/send-shipping-update.yaml"
+          "Entry": "../../services/send-confirmation.yaml"
         }
       ],
       "Connectors": [
         {
-          "From": "",
-          "To": "",
-          "Mappings": null,
-          "Validations": null,
-          "Entry": "../../connectors/01-validate-to-parse.yaml"
+          "From": "validate-order",
+          "To": "parse-order",
+          "Mappings": [
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "validation_data",
+              "Expression": "source.output"
+            }
+          ],
+          "Validations": [
+            {
+              "Expression": "source.output.valid == true",
+              "Message": "Order validation failed"
+            }
+          ],
+          "Entry": ""
         },
         {
-          "From": "",
-          "To": "",
-          "Mappings": null,
+          "From": "parse-order",
+          "To": "enrich-customer",
+          "Mappings": [
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "customer_id",
+              "Expression": "source.output.validation_data.order.customer_id"
+            }
+          ],
           "Validations": null,
-          "Entry": "../../connectors/02-parse-to-enrich.yaml"
+          "Entry": ""
         },
         {
-          "From": "",
-          "To": "",
-          "Mappings": null,
+          "From": "enrich-customer",
+          "To": "calculate-totals",
+          "Mappings": [
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "items",
+              "Expression": "execution.input.order.items"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "tier",
+              "Expression": "source.output.customer_data.tier"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "shipping_state",
+              "Expression": "source.output.customer_data.shipping_address.state"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "email",
+              "Expression": "source.output.customer_data.email"
+            }
+          ],
           "Validations": null,
-          "Entry": "../../connectors/03-enrich-to-subtotal.yaml"
+          "Entry": ""
         },
         {
-          "From": "",
-          "To": "",
-          "Mappings": null,
+          "From": "calculate-totals",
+          "To": "authorize-payment",
+          "Mappings": [
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "amount_cents",
+              "Expression": "execution.input.order.total"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "currency",
+              "Expression": "source.output.currency"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "email",
+              "Expression": "source.output.email"
+            }
+          ],
           "Validations": null,
-          "Entry": "../../connectors/04-subtotal-to-discounts.yaml"
+          "Entry": ""
         },
         {
-          "From": "",
-          "To": "",
-          "Mappings": null,
-          "Validations": null,
-          "Entry": "../../connectors/05-discounts-to-tax.yaml"
+          "From": "authorize-payment",
+          "To": "capture-payment",
+          "Mappings": [
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "payment_intent_id",
+              "Expression": "source.output.payment_intent.id"
+            }
+          ],
+          "Validations": [
+            {
+              "Expression": "source.output.payment_intent.status == 'requires_capture'",
+              "Message": "Payment not authorized"
+            }
+          ],
+          "Entry": ""
         },
         {
-          "From": "",
-          "To": "",
-          "Mappings": null,
-          "Validations": null,
-          "Entry": "../../connectors/06-tax-to-authorize.yaml"
+          "From": "capture-payment",
+          "To": "create-shipment",
+          "Mappings": [
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "order",
+              "Expression": "execution.input.order"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "shipping_address",
+              "Expression": "execution.input.order.shipping_address"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "email",
+              "Expression": "execution.input.order.customer_email"
+            }
+          ],
+          "Validations": [
+            {
+              "Expression": "source.output.capture_result.status == 'succeeded'",
+              "Message": "Payment capture failed"
+            }
+          ],
+          "Entry": ""
         },
         {
-          "From": "",
-          "To": "",
-          "Mappings": null,
+          "From": "create-shipment",
+          "To": "send-confirmation",
+          "Mappings": [
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "tracking_number",
+              "Expression": "source.output.shipment.tracking_number"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "carrier",
+              "Expression": "source.output.shipment.carrier"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "email",
+              "Expression": "source.output.email"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "grand_total",
+              "Expression": "execution.input.order.total"
+            }
+          ],
           "Validations": null,
-          "Entry": "../../connectors/07-authorize-to-capture.yaml"
-        },
-        {
-          "From": "",
-          "To": "",
-          "Mappings": null,
-          "Validations": null,
-          "Entry": "../../connectors/08-capture-to-check-stock.yaml"
+          "Entry": ""
         }
       ],
       "Config": {
-        "currency": "USD",
         "environment": "${environment}"
       }
     },
     "services": [
       {
-        "ref": "validate-request",
-        "sourcePath": "services/api/validate-request.yaml",
+        "ref": "validate-order",
+        "sourcePath": "services/validate-order.yaml",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Service",
           "Metadata": {
-            "Name": "validate-request",
+            "Name": "validate-order",
             "Version": "1.0.0",
             "Description": "Validate incoming order request"
           },
           "Entry": "",
           "Spec": {
             "Executor": {
-              "Type": "http",
+              "Type": "set",
               "Version": "",
               "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
+              "Config": null
             },
             "Config": {
-              "headers": {
-                "Authorization": "Bearer ${env.API_TOKEN}",
-                "Content-Type": "application/json"
-              },
-              "method": "POST",
-              "url": "${api.base_url}/orders/validate"
+              "status": "validated",
+              "valid": true
             },
             "Mappings": [
               {
-                "Name": "request-input",
+                "Name": "",
                 "Direction": "input",
                 "Source": "execution.input.order",
                 "Target": "order",
-                "Expression": "input.order"
-              },
-              {
-                "Name": "validation-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "validation_result",
-                "Expression": "source.output"
+                "Expression": ""
               }
             ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "order_id",
-                  "customer_id",
-                  "items"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "errors": {
-                    "type": "array"
-                  },
-                  "valid": {
-                    "type": "boolean"
-                  }
-                },
-                "type": "object"
-              }
-            },
+            "Validation": null,
             "Execution": {
               "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
-              "Concurrency": 4,
+              "Timeout": "5s",
+              "Retries": 0,
+              "Concurrency": 0,
               "ContinueOnFail": false
             }
           }
@@ -268,7 +340,7 @@
       },
       {
         "ref": "parse-order",
-        "sourcePath": "services/api/parse-order.yaml",
+        "sourcePath": "services/parse-order.yaml",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Service",
@@ -280,65 +352,28 @@
           "Entry": "",
           "Spec": {
             "Executor": {
-              "Type": "http",
+              "Type": "set",
               "Version": "",
               "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
+              "Config": null
             },
             "Config": {
-              "headers": {
-                "Content-Type": "application/json"
-              },
-              "method": "POST",
-              "url": "${api.base_url}/orders/parse"
+              "currency": "USD"
             },
             "Mappings": [
               {
-                "Name": "validation-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "validation_result",
+                "Source": "validation_data",
                 "Target": "validation_data",
-                "Expression": "source.output.validation_result"
-              },
-              {
-                "Name": "parsed-order",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "parsed_order",
-                "Expression": "source.output"
+                "Expression": ""
               }
             ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "validation_data"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "customer_id": {
-                    "type": "string"
-                  },
-                  "items": {
-                    "type": "array"
-                  },
-                  "order_id": {
-                    "type": "string"
-                  },
-                  "total": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              }
-            },
+            "Validation": null,
             "Execution": {
               "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
+              "Timeout": "5s",
+              "Retries": 0,
               "Concurrency": 0,
               "ContinueOnFail": false
             }
@@ -347,74 +382,48 @@
       },
       {
         "ref": "enrich-customer",
-        "sourcePath": "services/api/enrich-customer.yaml",
+        "sourcePath": "services/enrich-customer.yaml",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Service",
           "Metadata": {
             "Name": "enrich-customer",
             "Version": "1.0.0",
-            "Description": "Enrich order with customer data"
+            "Description": "Enrich with customer data"
           },
           "Entry": "",
           "Spec": {
             "Executor": {
-              "Type": "http",
+              "Type": "set",
               "Version": "",
               "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
+              "Config": null
             },
             "Config": {
-              "headers": {
-                "Authorization": "Bearer ${env.CUSTOMER_API_TOKEN}"
-              },
-              "method": "GET",
-              "url": "${api.base_url}/customers/${input.parsed_order.customer_id}"
+              "customer_data": {
+                "email": "customer@example.com",
+                "shipping_address": {
+                  "city": "San Francisco",
+                  "state": "CA",
+                  "zip": 94102
+                },
+                "tier": "gold"
+              }
             },
             "Mappings": [
               {
-                "Name": "customer-id-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "parsed_order.customer_id",
+                "Source": "customer_id",
                 "Target": "customer_id",
-                "Expression": "input.parsed_order.customer_id"
-              },
-              {
-                "Name": "customer-data-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "customer_data",
-                "Expression": "source.output"
+                "Expression": ""
               }
             ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "customer_id"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "email": {
-                    "type": "string"
-                  },
-                  "shipping_address": {
-                    "type": "object"
-                  },
-                  "tier": {
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              }
-            },
+            "Validation": null,
             "Execution": {
               "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
+              "Timeout": "5s",
+              "Retries": 0,
               "Concurrency": 0,
               "ContinueOnFail": false
             }
@@ -422,249 +431,63 @@
         }
       },
       {
-        "ref": "calculate-subtotal",
-        "sourcePath": "services/pricing/calculate-subtotal.yaml",
+        "ref": "calculate-totals",
+        "sourcePath": "services/calculate-totals.yaml",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Service",
           "Metadata": {
-            "Name": "calculate-subtotal",
+            "Name": "calculate-totals",
             "Version": "1.0.0",
-            "Description": "Calculate order subtotal from items"
+            "Description": "Calculate totals"
           },
           "Entry": "",
           "Spec": {
             "Executor": {
-              "Type": "command",
+              "Type": "set",
               "Version": "",
               "Source": "",
               "Config": null
             },
             "Config": {
-              "args": [
-                "-c",
-                "import json, sys\nitems = json.loads(sys.argv[1])\nsubtotal = sum(item['price'] * item['quantity'] for item in items)\nprint(json.dumps({\"subtotal\": subtotal}))\n"
-              ],
-              "command": "python3"
+              "discount_rate": 0.1,
+              "tax_rate": 0.0825
             },
             "Mappings": [
               {
-                "Name": "items-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "parsed_order.items",
+                "Source": "items",
                 "Target": "items",
-                "Expression": "input.parsed_order.items"
+                "Expression": ""
               },
               {
-                "Name": "subtotal-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "subtotal",
-                "Expression": "source.output.subtotal"
+                "Name": "",
+                "Direction": "input",
+                "Source": "tier",
+                "Target": "customer_tier",
+                "Expression": ""
+              },
+              {
+                "Name": "",
+                "Direction": "input",
+                "Source": "shipping_state",
+                "Target": "shipping_state",
+                "Expression": ""
+              },
+              {
+                "Name": "",
+                "Direction": "input",
+                "Source": "email",
+                "Target": "email",
+                "Expression": ""
               }
             ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "items"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "subtotal": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              }
-            },
+            "Validation": null,
             "Execution": {
               "Mode": "wait",
               "Timeout": "5s",
-              "Retries": 1,
-              "Concurrency": 0,
-              "ContinueOnFail": false
-            }
-          }
-        }
-      },
-      {
-        "ref": "apply-discounts",
-        "sourcePath": "services/pricing/apply-discounts.yaml",
-        "definition": {
-          "APIVersion": "neuron/v1",
-          "Kind": "Service",
-          "Metadata": {
-            "Name": "apply-discounts",
-            "Version": "1.0.0",
-            "Description": "Apply customer tier discounts"
-          },
-          "Entry": "",
-          "Spec": {
-            "Executor": {
-              "Type": "command",
-              "Version": "",
-              "Source": "",
-              "Config": null
-            },
-            "Config": {
-              "args": [
-                "-c",
-                "import json, sys\ndata = json.loads(sys.argv[1])\nsubtotal = data['subtotal']\ntier = data['tier']\ndiscount = 0\nif tier == 'gold':\n    discount = subtotal * 0.15\nelif tier == 'silver':\n    discount = subtotal * 0.10\nelif tier == 'bronze':\n    discount = subtotal * 0.05\ntotal = subtotal - discount\nprint(json.dumps({\"discount\": discount, \"total_after_discount\": total}))\n"
-              ],
-              "command": "python3"
-            },
-            "Mappings": [
-              {
-                "Name": "subtotal-input",
-                "Direction": "input",
-                "Source": "subtotal",
-                "Target": "subtotal",
-                "Expression": "source.output.subtotal"
-              },
-              {
-                "Name": "tier-input",
-                "Direction": "input",
-                "Source": "customer_data.tier",
-                "Target": "tier",
-                "Expression": "source.output.customer_data.tier"
-              },
-              {
-                "Name": "discount-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "discount",
-                "Expression": "source.output.discount"
-              },
-              {
-                "Name": "discounted-total-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "total_after_discount",
-                "Expression": "source.output.total_after_discount"
-              }
-            ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "subtotal",
-                  "tier"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "discount": {
-                    "type": "number"
-                  },
-                  "total_after_discount": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "Execution": {
-              "Mode": "wait",
-              "Timeout": "5s",
-              "Retries": 1,
-              "Concurrency": 0,
-              "ContinueOnFail": false
-            }
-          }
-        }
-      },
-      {
-        "ref": "calculate-tax",
-        "sourcePath": "services/pricing/calculate-tax.yaml",
-        "definition": {
-          "APIVersion": "neuron/v1",
-          "Kind": "Service",
-          "Metadata": {
-            "Name": "calculate-tax",
-            "Version": "1.0.0",
-            "Description": "Calculate tax based on shipping address"
-          },
-          "Entry": "",
-          "Spec": {
-            "Executor": {
-              "Type": "command",
-              "Version": "",
-              "Source": "",
-              "Config": null
-            },
-            "Config": {
-              "args": [
-                "-c",
-                "import json, sys\ndata = json.loads(sys.argv[1])\ntotal = data['total_after_discount']\nstate = data['shipping_address']['state']\ntax_rates = {'CA': 0.0825, 'NY': 0.08, 'TX': 0.0625, 'FL': 0.06}\nrate = tax_rates.get(state, 0.05)\ntax = total * rate\ngrand_total = total + tax\nprint(json.dumps({\"tax\": tax, \"grand_total\": grand_total, \"tax_rate\": rate}))\n"
-              ],
-              "command": "python3"
-            },
-            "Mappings": [
-              {
-                "Name": "total-input",
-                "Direction": "input",
-                "Source": "total_after_discount",
-                "Target": "total_after_discount",
-                "Expression": "source.output.total_after_discount"
-              },
-              {
-                "Name": "address-input",
-                "Direction": "input",
-                "Source": "customer_data.shipping_address",
-                "Target": "shipping_address",
-                "Expression": "source.output.customer_data.shipping_address"
-              },
-              {
-                "Name": "tax-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "tax",
-                "Expression": "source.output.tax"
-              },
-              {
-                "Name": "grand-total-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "grand_total",
-                "Expression": "source.output.grand_total"
-              },
-              {
-                "Name": "tax-rate-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "tax_rate",
-                "Expression": "source.output.tax_rate"
-              }
-            ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "total_after_discount",
-                  "shipping_address"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "grand_total": {
-                    "type": "number"
-                  },
-                  "tax": {
-                    "type": "number"
-                  },
-                  "tax_rate": {
-                    "type": "number"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "Execution": {
-              "Mode": "wait",
-              "Timeout": "5s",
-              "Retries": 1,
+              "Retries": 0,
               "Concurrency": 0,
               "ContinueOnFail": false
             }
@@ -673,90 +496,57 @@
       },
       {
         "ref": "authorize-payment",
-        "sourcePath": "services/payment/authorize-payment.yaml",
+        "sourcePath": "services/authorize-payment.yaml",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Service",
           "Metadata": {
             "Name": "authorize-payment",
             "Version": "1.0.0",
-            "Description": "Authorize payment with provider"
+            "Description": "Authorize payment"
           },
           "Entry": "",
           "Spec": {
             "Executor": {
-              "Type": "http",
+              "Type": "set",
               "Version": "",
               "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
+              "Config": null
             },
             "Config": {
-              "headers": {
-                "Authorization": "Bearer ${env.STRIPE_SECRET_KEY}",
-                "Content-Type": "application/x-www-form-urlencoded"
-              },
-              "method": "POST",
-              "url": "https://api.stripe.com/v1/payment_intents"
+              "payment_intent": {
+                "id": "pi_abc123",
+                "status": "requires_capture"
+              }
             },
             "Mappings": [
               {
-                "Name": "amount-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "grand_total",
-                "Target": "amount",
-                "Expression": "int(source.output.grand_total * 100)"
+                "Source": "amount_cents",
+                "Target": "amount_cents",
+                "Expression": ""
               },
               {
-                "Name": "currency-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "execution.config.currency",
+                "Source": "currency",
                 "Target": "currency",
-                "Expression": "config.currency"
+                "Expression": ""
               },
               {
-                "Name": "customer-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "customer_data.email",
-                "Target": "customer",
-                "Expression": "source.output.customer_data.email"
-              },
-              {
-                "Name": "payment-intent-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "payment_intent",
-                "Expression": "source.output"
+                "Source": "email",
+                "Target": "email",
+                "Expression": ""
               }
             ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "amount",
-                  "currency"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "client_secret": {
-                    "type": "string"
-                  },
-                  "id": {
-                    "type": "string"
-                  },
-                  "status": {
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              }
-            },
+            "Validation": null,
             "Execution": {
               "Mode": "wait",
-              "Timeout": "15s",
-              "Retries": 2,
+              "Timeout": "5s",
+              "Retries": 0,
               "Concurrency": 0,
               "ContinueOnFail": false
             }
@@ -765,218 +555,43 @@
       },
       {
         "ref": "capture-payment",
-        "sourcePath": "services/payment/capture-payment.yaml",
+        "sourcePath": "services/capture-payment.yaml",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Service",
           "Metadata": {
             "Name": "capture-payment",
             "Version": "1.0.0",
-            "Description": "Capture authorized payment"
+            "Description": "Capture payment"
           },
           "Entry": "",
           "Spec": {
             "Executor": {
-              "Type": "http",
+              "Type": "set",
               "Version": "",
               "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
+              "Config": null
             },
             "Config": {
-              "headers": {
-                "Authorization": "Bearer ${env.STRIPE_SECRET_KEY}",
-                "Content-Type": "application/x-www-form-urlencoded"
-              },
-              "method": "POST",
-              "url": "https://api.stripe.com/v1/payment_intents/${input.payment_intent.id}/capture"
+              "capture_result": {
+                "amount_received": 7997,
+                "status": "succeeded"
+              }
             },
             "Mappings": [
               {
-                "Name": "payment-intent-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "payment_intent.id",
+                "Source": "payment_intent_id",
                 "Target": "payment_intent_id",
-                "Expression": "source.output.payment_intent.id"
-              },
-              {
-                "Name": "capture-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "capture_result",
-                "Expression": "source.output"
+                "Expression": ""
               }
             ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "payment_intent_id"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "amount_received": {
-                    "type": "number"
-                  },
-                  "status": {
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              }
-            },
+            "Validation": null,
             "Execution": {
               "Mode": "wait",
-              "Timeout": "15s",
-              "Retries": 2,
-              "Concurrency": 0,
-              "ContinueOnFail": false
-            }
-          }
-        }
-      },
-      {
-        "ref": "check-stock",
-        "sourcePath": "services/inventory/check-stock.yaml",
-        "definition": {
-          "APIVersion": "neuron/v1",
-          "Kind": "Service",
-          "Metadata": {
-            "Name": "check-stock",
-            "Version": "1.0.0",
-            "Description": "Check inventory availability"
-          },
-          "Entry": "",
-          "Spec": {
-            "Executor": {
-              "Type": "http",
-              "Version": "",
-              "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
-            },
-            "Config": {
-              "headers": {
-                "Content-Type": "application/json"
-              },
-              "method": "POST",
-              "url": "${api.base_url}/inventory/check"
-            },
-            "Mappings": [
-              {
-                "Name": "items-input",
-                "Direction": "input",
-                "Source": "parsed_order.items",
-                "Target": "items",
-                "Expression": "input.parsed_order.items"
-              },
-              {
-                "Name": "stock-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "stock_status",
-                "Expression": "source.output"
-              }
-            ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "items"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "available": {
-                    "type": "boolean"
-                  },
-                  "items": {
-                    "type": "array"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "Execution": {
-              "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
-              "Concurrency": 0,
-              "ContinueOnFail": false
-            }
-          }
-        }
-      },
-      {
-        "ref": "reserve-items",
-        "sourcePath": "services/inventory/reserve-items.yaml",
-        "definition": {
-          "APIVersion": "neuron/v1",
-          "Kind": "Service",
-          "Metadata": {
-            "Name": "reserve-items",
-            "Version": "1.0.0",
-            "Description": "Reserve items in inventory"
-          },
-          "Entry": "",
-          "Spec": {
-            "Executor": {
-              "Type": "http",
-              "Version": "",
-              "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
-            },
-            "Config": {
-              "headers": {
-                "Content-Type": "application/json"
-              },
-              "method": "POST",
-              "url": "${api.base_url}/inventory/reserve"
-            },
-            "Mappings": [
-              {
-                "Name": "items-input",
-                "Direction": "input",
-                "Source": "parsed_order.items",
-                "Target": "items",
-                "Expression": "input.parsed_order.items"
-              },
-              {
-                "Name": "reservation-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "reservation",
-                "Expression": "source.output"
-              }
-            ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "items"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "reservation_id": {
-                    "type": "string"
-                  },
-                  "status": {
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "Execution": {
-              "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
+              "Timeout": "5s",
+              "Retries": 0,
               "Concurrency": 0,
               "ContinueOnFail": false
             }
@@ -985,155 +600,58 @@
       },
       {
         "ref": "create-shipment",
-        "sourcePath": "services/fulfillment/create-shipment.yaml",
+        "sourcePath": "services/create-shipment.yaml",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Service",
           "Metadata": {
             "Name": "create-shipment",
             "Version": "1.0.0",
-            "Description": "Create shipping label"
+            "Description": "Create shipment"
           },
           "Entry": "",
           "Spec": {
             "Executor": {
-              "Type": "http",
+              "Type": "set",
               "Version": "",
               "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
+              "Config": null
             },
             "Config": {
-              "headers": {
-                "Content-Type": "application/json"
-              },
-              "method": "POST",
-              "url": "${api.base_url}/shipments/create"
+              "shipment": {
+                "carrier": "UPS",
+                "label_url": "https://shipping.example.com/label/1Z999AA10123456784",
+                "tracking_number": "1Z999AA10123456784"
+              }
             },
             "Mappings": [
               {
-                "Name": "order-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "parsed_order",
+                "Source": "order",
                 "Target": "order",
-                "Expression": "input.parsed_order"
+                "Expression": ""
               },
               {
-                "Name": "address-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "customer_data.shipping_address",
+                "Source": "shipping_address",
                 "Target": "shipping_address",
-                "Expression": "source.output.customer_data.shipping_address"
+                "Expression": ""
               },
               {
-                "Name": "shipment-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "shipment",
-                "Expression": "source.output"
-              }
-            ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "order",
-                  "shipping_address"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "carrier": {
-                    "type": "string"
-                  },
-                  "label_url": {
-                    "type": "string"
-                  },
-                  "tracking_number": {
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "Execution": {
-              "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
-              "Concurrency": 0,
-              "ContinueOnFail": false
-            }
-          }
-        }
-      },
-      {
-        "ref": "notify-carrier",
-        "sourcePath": "services/fulfillment/notify-carrier.yaml",
-        "definition": {
-          "APIVersion": "neuron/v1",
-          "Kind": "Service",
-          "Metadata": {
-            "Name": "notify-carrier",
-            "Version": "1.0.0",
-            "Description": "Notify carrier for pickup"
-          },
-          "Entry": "",
-          "Spec": {
-            "Executor": {
-              "Type": "http",
-              "Version": "",
-              "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
-            },
-            "Config": {
-              "headers": {
-                "Content-Type": "application/json"
-              },
-              "method": "POST",
-              "url": "${api.base_url}/carriers/notify"
-            },
-            "Mappings": [
-              {
-                "Name": "shipment-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "shipment",
-                "Target": "shipment",
-                "Expression": "source.output.shipment"
-              },
-              {
-                "Name": "carrier-notification-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "carrier_notification",
-                "Expression": "source.output"
+                "Source": "email",
+                "Target": "email",
+                "Expression": ""
               }
             ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "shipment"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "pickup_scheduled": {
-                    "type": "boolean"
-                  },
-                  "pickup_time": {
-                    "type": "string"
-                  }
-                },
-                "type": "object"
-              }
-            },
+            "Validation": null,
             "Execution": {
               "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
+              "Timeout": "5s",
+              "Retries": 0,
               "Concurrency": 0,
               "ContinueOnFail": false
             }
@@ -1142,176 +660,55 @@
       },
       {
         "ref": "send-confirmation",
-        "sourcePath": "services/notifications/send-confirmation.yaml",
+        "sourcePath": "services/send-confirmation.yaml",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Service",
           "Metadata": {
             "Name": "send-confirmation",
             "Version": "1.0.0",
-            "Description": "Send order confirmation email"
+            "Description": "Send confirmation email"
           },
           "Entry": "",
           "Spec": {
             "Executor": {
-              "Type": "http",
+              "Type": "set",
               "Version": "",
               "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
+              "Config": null
             },
             "Config": {
-              "headers": {
-                "Content-Type": "application/json"
-              },
-              "method": "POST",
-              "url": "${api.base_url}/emails/send"
+              "confirmation_sent": true,
+              "message_id": "msg_xyz789"
             },
             "Mappings": [
               {
-                "Name": "email-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "customer_data.email",
-                "Target": "to",
-                "Expression": "source.output.customer_data.email"
-              },
-              {
-                "Name": "order-input",
-                "Direction": "input",
-                "Source": "parsed_order",
-                "Target": "order",
-                "Expression": "input.parsed_order"
-              },
-              {
-                "Name": "total-input",
-                "Direction": "input",
-                "Source": "grand_total",
-                "Target": "total",
-                "Expression": "source.output.grand_total"
-              },
-              {
-                "Name": "email-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "confirmation_email",
-                "Expression": "source.output"
-              }
-            ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "to",
-                  "order",
-                  "total"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "message_id": {
-                    "type": "string"
-                  },
-                  "sent": {
-                    "type": "boolean"
-                  }
-                },
-                "type": "object"
-              }
-            },
-            "Execution": {
-              "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
-              "Concurrency": 0,
-              "ContinueOnFail": false
-            }
-          }
-        }
-      },
-      {
-        "ref": "send-shipping-update",
-        "sourcePath": "services/notifications/send-shipping-update.yaml",
-        "definition": {
-          "APIVersion": "neuron/v1",
-          "Kind": "Service",
-          "Metadata": {
-            "Name": "send-shipping-update",
-            "Version": "1.0.0",
-            "Description": "Send shipping notification"
-          },
-          "Entry": "",
-          "Spec": {
-            "Executor": {
-              "Type": "http",
-              "Version": "",
-              "Source": "",
-              "Config": {
-                "timeout": "${api.timeout}"
-              }
-            },
-            "Config": {
-              "headers": {
-                "Content-Type": "application/json"
-              },
-              "method": "POST",
-              "url": "${api.base_url}/emails/send"
-            },
-            "Mappings": [
-              {
-                "Name": "email-input",
-                "Direction": "input",
-                "Source": "customer_data.email",
-                "Target": "to",
-                "Expression": "source.output.customer_data.email"
-              },
-              {
-                "Name": "tracking-input",
-                "Direction": "input",
-                "Source": "shipment.tracking_number",
+                "Source": "tracking_number",
                 "Target": "tracking_number",
-                "Expression": "source.output.shipment.tracking_number"
+                "Expression": ""
               },
               {
-                "Name": "carrier-input",
+                "Name": "",
                 "Direction": "input",
-                "Source": "shipment.carrier",
+                "Source": "carrier",
                 "Target": "carrier",
-                "Expression": "source.output.shipment.carrier"
+                "Expression": ""
               },
               {
-                "Name": "email-output",
-                "Direction": "output",
-                "Source": "result",
-                "Target": "shipping_email",
-                "Expression": "source.output"
+                "Name": "",
+                "Direction": "input",
+                "Source": "email",
+                "Target": "email",
+                "Expression": ""
               }
             ],
-            "Validation": {
-              "Input": {
-                "required": [
-                  "to",
-                  "tracking_number",
-                  "carrier"
-                ],
-                "type": "object"
-              },
-              "Output": {
-                "properties": {
-                  "message_id": {
-                    "type": "string"
-                  },
-                  "sent": {
-                    "type": "boolean"
-                  }
-                },
-                "type": "object"
-              }
-            },
+            "Validation": null,
             "Execution": {
               "Mode": "wait",
-              "Timeout": "10s",
-              "Retries": 2,
+              "Timeout": "5s",
+              "Retries": 0,
               "Concurrency": 0,
               "ContinueOnFail": false
             }
@@ -1321,17 +718,17 @@
     ],
     "connectors": [
       {
-        "ref": "validate-to-parse",
-        "sourcePath": "connectors/01-validate-to-parse.yaml",
+        "ref": "connector-validate-order-to-parse-order",
+        "sourcePath": "systems/order-processing/system.yaml (inline)",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Connector",
           "Metadata": {
-            "Name": "validate-to-parse",
+            "Name": "connector-validate-order-to-parse-order",
             "Version": "1.0.0",
-            "Description": "Validated request flows into order parsing"
+            "Description": ""
           },
-          "From": "validate-request",
+          "From": "validate-order",
           "To": "parse-order",
           "Mappings": [
             {
@@ -1339,27 +736,27 @@
               "Direction": "",
               "Source": "",
               "Target": "validation_data",
-              "Expression": "source.output.validation_result"
+              "Expression": "source.output"
             }
           ],
           "Validations": [
             {
-              "Expression": "source.output.validation_result.valid == true",
+              "Expression": "source.output.valid == true",
               "Message": "Order validation failed"
             }
           ]
         }
       },
       {
-        "ref": "parse-to-enrich",
-        "sourcePath": "connectors/02-parse-to-enrich.yaml",
+        "ref": "connector-parse-order-to-enrich-customer",
+        "sourcePath": "systems/order-processing/system.yaml (inline)",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Connector",
           "Metadata": {
-            "Name": "parse-to-enrich",
+            "Name": "connector-parse-order-to-enrich-customer",
             "Version": "1.0.0",
-            "Description": "Parsed order flows into customer enrichment"
+            "Description": ""
           },
           "From": "parse-order",
           "To": "enrich-customer",
@@ -1369,175 +766,107 @@
               "Direction": "",
               "Source": "",
               "Target": "customer_id",
-              "Expression": "source.output.parsed_order.customer_id"
+              "Expression": "source.output.validation_data.order.customer_id"
             }
           ],
-          "Validations": [
-            {
-              "Expression": "source.output.parsed_order.order_id != null",
-              "Message": "Parsed order is missing order_id"
-            }
-          ]
+          "Validations": null
         }
       },
       {
-        "ref": "enrich-to-subtotal",
-        "sourcePath": "connectors/03-enrich-to-subtotal.yaml",
+        "ref": "connector-enrich-customer-to-calculate-totals",
+        "sourcePath": "systems/order-processing/system.yaml (inline)",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Connector",
           "Metadata": {
-            "Name": "enrich-to-subtotal",
+            "Name": "connector-enrich-customer-to-calculate-totals",
             "Version": "1.0.0",
-            "Description": "Enriched order flows into subtotal calculation"
+            "Description": ""
           },
           "From": "enrich-customer",
-          "To": "calculate-subtotal",
+          "To": "calculate-totals",
           "Mappings": [
             {
               "Name": "",
               "Direction": "",
               "Source": "",
               "Target": "items",
-              "Expression": "input.parsed_order.items"
-            }
-          ],
-          "Validations": [
-            {
-              "Expression": "source.output.customer_data.tier != null",
-              "Message": "Customer tier is missing"
-            }
-          ]
-        }
-      },
-      {
-        "ref": "subtotal-to-discounts",
-        "sourcePath": "connectors/04-subtotal-to-discounts.yaml",
-        "definition": {
-          "APIVersion": "neuron/v1",
-          "Kind": "Connector",
-          "Metadata": {
-            "Name": "subtotal-to-discounts",
-            "Version": "1.0.0",
-            "Description": "Subtotal flows into discount application"
-          },
-          "From": "calculate-subtotal",
-          "To": "apply-discounts",
-          "Mappings": [
-            {
-              "Name": "",
-              "Direction": "",
-              "Source": "",
-              "Target": "subtotal",
-              "Expression": "source.output.subtotal"
+              "Expression": "execution.input.order.items"
             },
             {
               "Name": "",
               "Direction": "",
               "Source": "",
               "Target": "tier",
-              "Expression": "input.customer_data.tier"
-            }
-          ],
-          "Validations": [
-            {
-              "Expression": "source.output.subtotal \u003e 0",
-              "Message": "Subtotal must be positive"
-            }
-          ]
-        }
-      },
-      {
-        "ref": "discounts-to-tax",
-        "sourcePath": "connectors/05-discounts-to-tax.yaml",
-        "definition": {
-          "APIVersion": "neuron/v1",
-          "Kind": "Connector",
-          "Metadata": {
-            "Name": "discounts-to-tax",
-            "Version": "1.0.0",
-            "Description": "Discounted total flows into tax calculation"
-          },
-          "From": "apply-discounts",
-          "To": "calculate-tax",
-          "Mappings": [
-            {
-              "Name": "",
-              "Direction": "",
-              "Source": "",
-              "Target": "total_after_discount",
-              "Expression": "source.output.total_after_discount"
+              "Expression": "source.output.customer_data.tier"
             },
             {
               "Name": "",
               "Direction": "",
               "Source": "",
-              "Target": "shipping_address",
-              "Expression": "input.customer_data.shipping_address"
+              "Target": "shipping_state",
+              "Expression": "source.output.customer_data.shipping_address.state"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "email",
+              "Expression": "source.output.customer_data.email"
             }
           ],
-          "Validations": [
-            {
-              "Expression": "source.output.total_after_discount \u003e 0",
-              "Message": "Discounted total must be positive"
-            }
-          ]
+          "Validations": null
         }
       },
       {
-        "ref": "tax-to-authorize",
-        "sourcePath": "connectors/06-tax-to-authorize.yaml",
+        "ref": "connector-calculate-totals-to-authorize-payment",
+        "sourcePath": "systems/order-processing/system.yaml (inline)",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Connector",
           "Metadata": {
-            "Name": "tax-to-authorize",
+            "Name": "connector-calculate-totals-to-authorize-payment",
             "Version": "1.0.0",
-            "Description": "Grand total flows into payment authorization"
+            "Description": ""
           },
-          "From": "calculate-tax",
+          "From": "calculate-totals",
           "To": "authorize-payment",
           "Mappings": [
             {
               "Name": "",
               "Direction": "",
               "Source": "",
-              "Target": "amount",
-              "Expression": "int(source.output.grand_total * 100)"
+              "Target": "amount_cents",
+              "Expression": "execution.input.order.total"
             },
             {
               "Name": "",
               "Direction": "",
               "Source": "",
               "Target": "currency",
-              "Expression": "'USD'"
+              "Expression": "source.output.currency"
             },
             {
               "Name": "",
               "Direction": "",
               "Source": "",
-              "Target": "customer",
-              "Expression": "input.customer_data.email"
+              "Target": "email",
+              "Expression": "source.output.email"
             }
           ],
-          "Validations": [
-            {
-              "Expression": "source.output.grand_total \u003e 0",
-              "Message": "Grand total must be positive"
-            }
-          ]
+          "Validations": null
         }
       },
       {
-        "ref": "authorize-to-capture",
-        "sourcePath": "connectors/07-authorize-to-capture.yaml",
+        "ref": "connector-authorize-payment-to-capture-payment",
+        "sourcePath": "systems/order-processing/system.yaml (inline)",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Connector",
           "Metadata": {
-            "Name": "authorize-to-capture",
+            "Name": "connector-authorize-payment-to-capture-payment",
             "Version": "1.0.0",
-            "Description": "Authorized payment flows into capture"
+            "Description": ""
           },
           "From": "authorize-payment",
           "To": "capture-payment",
@@ -1553,31 +882,45 @@
           "Validations": [
             {
               "Expression": "source.output.payment_intent.status == 'requires_capture'",
-              "Message": "Payment is not authorized for capture"
+              "Message": "Payment not authorized"
             }
           ]
         }
       },
       {
-        "ref": "capture-to-check-stock",
-        "sourcePath": "connectors/08-capture-to-check-stock.yaml",
+        "ref": "connector-capture-payment-to-create-shipment",
+        "sourcePath": "systems/order-processing/system.yaml (inline)",
         "definition": {
           "APIVersion": "neuron/v1",
           "Kind": "Connector",
           "Metadata": {
-            "Name": "capture-to-check-stock",
+            "Name": "connector-capture-payment-to-create-shipment",
             "Version": "1.0.0",
-            "Description": "Payment captured, proceed to inventory check"
+            "Description": ""
           },
           "From": "capture-payment",
-          "To": "check-stock",
+          "To": "create-shipment",
           "Mappings": [
             {
               "Name": "",
               "Direction": "",
               "Source": "",
-              "Target": "items",
-              "Expression": "input.parsed_order.items"
+              "Target": "order",
+              "Expression": "execution.input.order"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "shipping_address",
+              "Expression": "execution.input.order.shipping_address"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "email",
+              "Expression": "execution.input.order.customer_email"
             }
           ],
           "Validations": [
@@ -1587,155 +930,120 @@
             }
           ]
         }
+      },
+      {
+        "ref": "connector-create-shipment-to-send-confirmation",
+        "sourcePath": "systems/order-processing/system.yaml (inline)",
+        "definition": {
+          "APIVersion": "neuron/v1",
+          "Kind": "Connector",
+          "Metadata": {
+            "Name": "connector-create-shipment-to-send-confirmation",
+            "Version": "1.0.0",
+            "Description": ""
+          },
+          "From": "create-shipment",
+          "To": "send-confirmation",
+          "Mappings": [
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "tracking_number",
+              "Expression": "source.output.shipment.tracking_number"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "carrier",
+              "Expression": "source.output.shipment.carrier"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "email",
+              "Expression": "source.output.email"
+            },
+            {
+              "Name": "",
+              "Direction": "",
+              "Source": "",
+              "Target": "grand_total",
+              "Expression": "execution.input.order.total"
+            }
+          ],
+          "Validations": null
+        }
       }
     ]
   },
   "executorRequirements": [
     {
-      "type": "http",
+      "type": "set",
       "services": [
-        "validate-request",
+        "validate-order",
         "parse-order",
         "enrich-customer",
+        "calculate-totals",
         "authorize-payment",
         "capture-payment",
-        "check-stock",
-        "reserve-items",
         "create-shipment",
-        "notify-carrier",
-        "send-confirmation",
-        "send-shipping-update"
-      ]
-    },
-    {
-      "type": "command",
-      "services": [
-        "calculate-subtotal",
-        "apply-discounts",
-        "calculate-tax"
+        "send-confirmation"
       ]
     }
   ],
   "sourceFiles": [
     {
-      "path": "connectors/08-capture-to-check-stock.yaml",
-      "kind": "Connector",
-      "sha256": "f041458b6707682d7d7aafe0b8ee5f0b9a249b5421b8f434db41a92618c8c7a7"
-    },
-    {
-      "path": "services/pricing/calculate-subtotal.yaml",
-      "kind": "Service",
-      "sha256": "918f087fb34219ad6840a959bd86fd93f63d7aa26a6a256e66ea4222ac8e0f54"
-    },
-    {
-      "path": "services/payment/capture-payment.yaml",
-      "kind": "Service",
-      "sha256": "da6db51ff6f2beb43dd858d29e3933cf8d4b3de185598aefb286a76a6921840d"
-    },
-    {
-      "path": "services/inventory/reserve-items.yaml",
-      "kind": "Service",
-      "sha256": "7ce00472a06dc27f1c7e03a8ef10c2a34d05bb78ed19ce65176db54529e7019c"
-    },
-    {
-      "path": "connectors/07-authorize-to-capture.yaml",
-      "kind": "Connector",
-      "sha256": "6cb0086f323e6a1583a7ac8b53928710c0421eeab994187e0be739004e440900"
-    },
-    {
-      "path": "services/api/validate-request.yaml",
-      "kind": "Service",
-      "sha256": "1eee302310bfb325baa860500c5e230112952fafa8783a5cea2e547fc639290f"
-    },
-    {
-      "path": "services/api/parse-order.yaml",
-      "kind": "Service",
-      "sha256": "0e953ac4aca439608672ec84d3cb207bca3f9539bdbcc87c41552602518cbaf6"
-    },
-    {
-      "path": "services/pricing/apply-discounts.yaml",
-      "kind": "Service",
-      "sha256": "a1bd823f9e884febd1e1b0bceeef701d0cec374bf6402747d127a4a11df27175"
-    },
-    {
-      "path": "services/pricing/calculate-tax.yaml",
-      "kind": "Service",
-      "sha256": "faedc0d96a75a2203c64017d2a09ffd1a39b3b791202128ead1563718cef320f"
-    },
-    {
-      "path": "services/notifications/send-confirmation.yaml",
-      "kind": "Service",
-      "sha256": "d34f22127fb28082ac25f79c11feb73073e9d7e6231b1f66483fef2f62b44c74"
-    },
-    {
-      "path": "services/notifications/send-shipping-update.yaml",
-      "kind": "Service",
-      "sha256": "f4a3974740b7308e5609de728cb73796e9820cfccd839fb29bdb2549ac9a2108"
-    },
-    {
-      "path": "connectors/01-validate-to-parse.yaml",
-      "kind": "Connector",
-      "sha256": "9584e95ea7ba33a7053a881b1864448083021db99e62e9b5f8d30fdbd690a7f4"
-    },
-    {
-      "path": "connectors/02-parse-to-enrich.yaml",
-      "kind": "Connector",
-      "sha256": "41161c903e4821dba10a545ae0c33f55542350221feb2f45882d54e38a33cbd9"
-    },
-    {
       "path": "systems/order-processing/system.yaml",
       "kind": "System",
-      "sha256": "c5c859b61b3f8856db3551eeb5942908980f46f0ea0c735527dbf9d5208c1a13"
+      "sha256": "af2d7c842b6da49323737ea3862b018256339b969ad587062ba7a6af0056ac9b"
     },
     {
-      "path": "services/payment/authorize-payment.yaml",
+      "path": "services/validate-order.yaml",
       "kind": "Service",
-      "sha256": "a51016e3f789456d2d4417e97cf6bad21028fefebc8966b90acfce2ea29aa00c"
+      "sha256": "98905e65b358f4706ffa8b86a489c05004af60571f4509596e40b3d70d40e6dc"
     },
     {
-      "path": "services/fulfillment/create-shipment.yaml",
+      "path": "services/enrich-customer.yaml",
       "kind": "Service",
-      "sha256": "d008810e195b8d21c1c1e331061515aa83bc53116a5605abe127be69d00cd478"
+      "sha256": "43afa53e36fc9a88498c36fd2e8809e552d94b99fe98aa6bc018d313bfef5531"
     },
     {
-      "path": "services/fulfillment/notify-carrier.yaml",
+      "path": "services/calculate-totals.yaml",
       "kind": "Service",
-      "sha256": "abadc72b94162f59151c496e9ad206dec9337f1d606c316e7c03a2941e249498"
+      "sha256": "07a0c67454bb15c8fda2ab813b503e5714c4a1b603688ef754e726c830cc8f55"
     },
     {
-      "path": "connectors/03-enrich-to-subtotal.yaml",
-      "kind": "Connector",
-      "sha256": "72636c0e5c2e87e7c421559a2274a15fefa568b4cabd9e9cbd645023779ddd05"
+      "path": "services/authorize-payment.yaml",
+      "kind": "Service",
+      "sha256": "a04445c6782f3fe529596bccc379d780fb79ee6cb6c388a810872ad36b9d878d"
     },
     {
-      "path": "connectors/04-subtotal-to-discounts.yaml",
-      "kind": "Connector",
-      "sha256": "6d762cd6b6a72b51d2d5a5748de4e03618df9b54a87d46139bb98a8a1244dc61"
+      "path": "services/capture-payment.yaml",
+      "kind": "Service",
+      "sha256": "b724d40c9ff402e0510b170b01fe56c5af4c523396eb0fa4e382edcf2c13b085"
+    },
+    {
+      "path": "services/create-shipment.yaml",
+      "kind": "Service",
+      "sha256": "6a579d16904ea35ff1ddc7d125fc1d81eb2d911d3bc5956a07b2fb3e7136f052"
+    },
+    {
+      "path": "services/send-confirmation.yaml",
+      "kind": "Service",
+      "sha256": "74bf653d356311ede3450dad516974fc71a8bac648711e0a8bfee963256f362d"
     },
     {
       "path": "neuron.yaml",
       "kind": "Project",
-      "sha256": "f44b11ab42630ef7145390efc4c11ef1aead8da54047bf86b037717c907b4815"
+      "sha256": "e0eb65a62ec993ad92ee4c7291a123923a0125685624f9426abdb5d978eac160"
     },
     {
-      "path": "services/api/enrich-customer.yaml",
+      "path": "services/parse-order.yaml",
       "kind": "Service",
-      "sha256": "d3f3378bd9da23f855d0a99eeaf8c233ebcc8751ad885827adfc9897583d39d4"
-    },
-    {
-      "path": "services/inventory/check-stock.yaml",
-      "kind": "Service",
-      "sha256": "e0eef6473ea30c3af6fede54da71000edde1154cb5c65f56306501f3422d458c"
-    },
-    {
-      "path": "connectors/05-discounts-to-tax.yaml",
-      "kind": "Connector",
-      "sha256": "5b133d52d7fccf8ee5c06ff15d66dff0e49202963791ad38318f74df3e0a7cd1"
-    },
-    {
-      "path": "connectors/06-tax-to-authorize.yaml",
-      "kind": "Connector",
-      "sha256": "dec10f887561df704d1c234d8f8a34ce37ab3b1df0241b6c5b88af61558823f0"
+      "sha256": "05b4059dfc868d58f8c78f2f5593f262a2235ccc6d5dc127d9b1848d5bb288a0"
     }
   ]
 }

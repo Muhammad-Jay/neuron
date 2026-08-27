@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/Muhammad-Jay/neuron/application/project"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
@@ -39,7 +38,6 @@ func (p Parser) ParseSystem() (*core.System, error) {
 	}
 
 	connectors := make([]core.Connector, 0, len(p.data.System.Connectors))
-	incomingCount := make(map[core.ID]int)
 
 	for _, rc := range p.data.System.Connectors {
 		conn, err := p.convertConnector(rc, serviceMap)
@@ -47,36 +45,13 @@ func (p Parser) ParseSystem() (*core.System, error) {
 			return nil, err
 		}
 		connectors = append(connectors, conn)
-		incomingCount[conn.To.ServiceID]++
-	}
-
-	var triggers []core.Trigger
-	var nonTriggerServices []core.Service
-
-	if len(connectors) == 0 {
-		for _, rs := range p.data.System.Services {
-			triggers = append(triggers, core.Trigger{Service: serviceMap[rs.Ref]})
-		}
-	} else {
-		for _, rs := range p.data.System.Services {
-			svc := serviceMap[rs.Ref]
-			if incomingCount[svc.Metadata.ID] == 0 {
-				triggers = append(triggers, core.Trigger{Service: svc})
-				continue
-			}
-			nonTriggerServices = append(nonTriggerServices, svc)
-		}
-
-		if len(triggers) == 0 && len(nonTriggerServices) > 0 {
-			return nil, fmt.Errorf("system contains a connector cycle; no entry service found")
-		}
 	}
 
 	return &core.System{
 		Metadata: sysMeta,
 		Specification: core.SystemSpec{
-			Services:   nonTriggerServices,
-			Triggers:   triggers,
+			Services:   services,
+			Triggers:   nil,
 			Connectors: connectors,
 		},
 	}, nil
@@ -88,11 +63,6 @@ func (p Parser) convertService(rs project.ResolvedService) core.Service {
 	var inputs, outputs []core.Port
 	for _, m := range spec.Mappings {
 		portType := core.ValueAny
-		if strings.HasSuffix(m.Target, "_id") || strings.HasSuffix(m.Target, "_count") {
-			portType = core.ValueNumber
-		} else if strings.HasSuffix(m.Target, "_enabled") || strings.HasSuffix(m.Target, "_active") {
-			portType = core.ValueBool
-		}
 
 		if m.Direction == "input" {
 			inputs = append(inputs, core.Port{

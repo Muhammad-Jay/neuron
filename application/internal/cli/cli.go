@@ -9,6 +9,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/initcmd"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/instance"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/run"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/register"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -50,6 +51,7 @@ func init() {
 		execution.New(),
 		daemon.New(),
 		initcmd.New(),
+		register.New(),
 	)
 }
 
