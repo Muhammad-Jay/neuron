@@ -13,14 +13,13 @@ func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   command.Register,
 		Short: "Build, and register the current repo to N.O.R.E",
-		RunE: registerCmdHandler,
+		RunE:  registerCmdHandler,
 	}
-
 
 	return cmd
 }
 
-func registerCmdHandler(cmd *cobra.Command, args []string) error  {
+func registerCmdHandler(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
 	c, cleanup, err := bootstrap.SetupClient(ctx)
@@ -35,19 +34,32 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error  {
 	}
 
 	sys, err := p.ParseSystem()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
-	execSrc := p.GetExecutorSources()
+	key := p.GetInstanceKey()
 
 	request := protocol.RegisterRequest{
-		System: *sys,
-		ExecutionConfigurations: execSrc,
+		Key:                     key,
+		System:                  *sys,
+		ExecutionConfigurations: p.GetExecutorSources(),
 	}
 
 	result, err := c.Register(ctx, request)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 
-	fmt.Println(result.Message)
+	printRegistration(result)
 
 	return nil
+}
+
+func printRegistration(result protocol.RegisterResponse) {
+	line := fmt.Sprintf("%s@%s#%s:%s", result.Key.SystemID, result.Key.Version, result.Key.Hash, result.Key.Env)
+	if result.Status != "" {
+		line += fmt.Sprintf(" (%s)", result.Status)
+	}
+	fmt.Println(line)
 }

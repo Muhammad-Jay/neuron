@@ -8,6 +8,8 @@ import (
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/api/routes"
 	"github.com/Muhammad-Jay/neuron/nore/internal/instance"
+	"github.com/Muhammad-Jay/neuron/nore/internal/planner"
+	"github.com/Muhammad-Jay/neuron/nore/internal/system"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
 
@@ -16,13 +18,13 @@ type Server struct {
 	instances *instance.Manager
 }
 
-func NewServer(inst *instance.Manager) *Server {
+func NewServer(inst *instance.Manager, systems *system.Repository, compiler *planner.Compiler) *Server {
 	s := &Server{
 		mux:       http.NewServeMux(),
 		instances: inst,
 	}
 
-	routes.BuildRoutes(s.mux, s.instances)
+	routes.BuildRoutes(s.mux, s.instances, systems, compiler)
 
 	return s
 }

@@ -149,7 +149,14 @@ func (p Parser) convertConnector(rc project.ResolvedConnector, serviceMap map[st
 }
 
 func (p Parser) GetInstanceKey() protocol.InstanceKey {
-	hash, _ := protocol.HashBlueprint(p.data.System)
+	sys, err := p.ParseSystem()
+	if err != nil || sys == nil {
+		return protocol.InstanceKey{}
+	}
+	hash, err := protocol.HashSystem(*sys)
+	if err != nil {
+		return protocol.InstanceKey{}
+	}
 	return protocol.InstanceKey{
 		SystemID: p.data.Project.Metadata.Name,
 		Version:  p.data.Project.Metadata.Version,

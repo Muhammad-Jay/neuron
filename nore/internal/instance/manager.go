@@ -9,6 +9,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/event"
 	"github.com/Muhammad-Jay/neuron/nore/internal/execution"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
+	"github.com/Muhammad-Jay/neuron/nore/internal/system"
 	core2 "github.com/Muhammad-Jay/neuron/shared/types/core"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
@@ -19,13 +20,14 @@ type Manager struct {
 	instancesByKey map[protocol.InstanceKey]*Instance
 	instancesByID  map[string]*Instance
 
-	parent   context.Context
-	workers  int
-	store    storage.Store
+	parent  context.Context
+	workers int
+	store   storage.Store
 	metadata *metadataStore
+	systems *system.Repository
 }
 
-func NewManager(parent context.Context, workers int, store storage.Store) *Manager {
+func NewManager(parent context.Context, workers int, store storage.Store, systems *system.Repository) *Manager {
 	if parent == nil {
 		parent = context.Background()
 	}
@@ -39,6 +41,7 @@ func NewManager(parent context.Context, workers int, store storage.Store) *Manag
 		workers:        workers,
 		store:          store,
 		metadata:       newMetadataStore(store),
+		systems:        systems,
 	}
 	m.reconcile()
 	return m
@@ -79,21 +82,33 @@ func (m *Manager) GetByID(id string) (*Instance, bool) {
 	return i, ok
 }
 
-func (m *Manager) GetOrCreate(key protocol.InstanceKey, system *core2.System) (*Instance, bool, error) {
+// GetOrCreate returns the live runtime for key, lazily constructing it from
+// the durable RegisteredSystem when it is not already running. Registration
+// itself never creates an instance; this is the only entry point that does.
+func (m *Manager) GetOrCreate(ctx context.Context, key protocol.InstanceKey) (*Instance, bool, error) {
+	m.mu.RLock()
+	previous, ok := m.instancesByKey[key]
+	m.mu.RUnlock()
+	if ok && (previous.Status() == StatusRunning || previous.Status() == StatusStarting) {
+		return previous, false, nil
+	}
+
+	reg, err := m.systems.Get(ctx, key)
+	if err != nil {
+		return nil, false, err
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	id := core2.NewID("inst_")
 	if previous, ok := m.instancesByKey[key]; ok {
-		if previous.Status() == StatusRunning || previous.Status() == StatusStarting {
-			return previous, false, nil
-		}
 		id = core2.ID(previous.ID)
 		delete(m.instancesByKey, key)
 		delete(m.instancesByID, previous.ID)
 	}
 
-	i, err := New(m.parent, string(id), key, system, m.workers, m.store)
+	i, err := New(m.parent, string(id), key, &reg.System, m.workers, m.store)
 	if err != nil {
 		return nil, false, err
 	}

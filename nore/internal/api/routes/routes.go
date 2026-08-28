@@ -8,14 +8,16 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/api/handlers/register"
 	"github.com/Muhammad-Jay/neuron/nore/internal/api/middleware"
 	"github.com/Muhammad-Jay/neuron/nore/internal/instance"
+	"github.com/Muhammad-Jay/neuron/nore/internal/planner"
+	"github.com/Muhammad-Jay/neuron/nore/internal/system"
 )
 
-func BuildRoutes(mux *http.ServeMux, mgr *instance.Manager) http.Handler {
+func BuildRoutes(mux *http.ServeMux, mgr *instance.Manager, systems *system.Repository, compiler *planner.Compiler) http.Handler {
 	// Health
 	mux.HandleFunc("GET /health", health.Health)
 
 	// Instances
-	instHandler := instances.New(mgr)
+	instHandler := instances.New(mgr, systems, compiler)
 	mux.HandleFunc("GET /v1/instances", instHandler.ListInstances)
 	mux.HandleFunc("POST /v1/instances", instHandler.CreateInstance)
 	mux.HandleFunc("GET /v1/instances/{id}", instHandler.GetInstanceByID)
@@ -28,7 +30,7 @@ func BuildRoutes(mux *http.ServeMux, mgr *instance.Manager) http.Handler {
 	mux.HandleFunc("GET /v1/instances/{id}/executions/{execID}/events/stream", instHandler.StreamExecutionEvents)
 
 	// Register
-	reg := register.New()
+	reg := register.New(systems, compiler)
 	mux.HandleFunc("POST /v1/register", reg.Register)
 
 	handler := middleware.Recovery(mux)

@@ -13,8 +13,11 @@ import (
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/api"
 	"github.com/Muhammad-Jay/neuron/nore/internal/instance"
+	"github.com/Muhammad-Jay/neuron/nore/internal/planner"
+	"github.com/Muhammad-Jay/neuron/nore/internal/resolver"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage/sqlite"
+	"github.com/Muhammad-Jay/neuron/nore/internal/system"
 )
 
 func main() {
@@ -44,8 +47,19 @@ func main() {
 	}
 	defer store.Close()
 
-	inst := instance.NewManager(ctx, workers, store)
-	srv := api.NewServer(inst)
+	systems := system.NewRepository(store)
+
+	celCompiler, err := resolver.NewCELCompiler(resolver.DefaultCELConfig())
+	if err != nil {
+		log.Fatalf("init cel compiler: %v", err)
+	}
+	compiler, err := planner.NewCompiler(celCompiler)
+	if err != nil {
+		log.Fatalf("init planner: %v", err)
+	}
+
+	inst := instance.NewManager(ctx, workers, store, systems)
+	srv := api.NewServer(inst, systems, compiler)
 
 	type listenerEntry struct {
 		name string
