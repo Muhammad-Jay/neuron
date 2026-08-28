@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/project"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,7 +11,7 @@ import (
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "build",
+		Use:   command.Build,
 		Short: "Build the neuron systems",
 		RunE:  buildCmdHandler,
 	}

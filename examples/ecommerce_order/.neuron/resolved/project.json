@@ -1,6 +1,6 @@
 {
   "formatVersion": "v1",
-  "resolvedAt": "2026-08-26T09:16:59.426786461Z",
+  "resolvedAt": "2026-08-27T09:56:33.502713293Z",
   "project": {
     "APIVersion": "neuron/v1",
     "Kind": "Project",
@@ -1001,19 +1001,9 @@
       "sha256": "af2d7c842b6da49323737ea3862b018256339b969ad587062ba7a6af0056ac9b"
     },
     {
-      "path": "services/validate-order.yaml",
+      "path": "services/parse-order.yaml",
       "kind": "Service",
-      "sha256": "98905e65b358f4706ffa8b86a489c05004af60571f4509596e40b3d70d40e6dc"
-    },
-    {
-      "path": "services/enrich-customer.yaml",
-      "kind": "Service",
-      "sha256": "43afa53e36fc9a88498c36fd2e8809e552d94b99fe98aa6bc018d313bfef5531"
-    },
-    {
-      "path": "services/calculate-totals.yaml",
-      "kind": "Service",
-      "sha256": "07a0c67454bb15c8fda2ab813b503e5714c4a1b603688ef754e726c830cc8f55"
+      "sha256": "05b4059dfc868d58f8c78f2f5593f262a2235ccc6d5dc127d9b1848d5bb288a0"
     },
     {
       "path": "services/authorize-payment.yaml",
@@ -1041,9 +1031,19 @@
       "sha256": "e0eb65a62ec993ad92ee4c7291a123923a0125685624f9426abdb5d978eac160"
     },
     {
-      "path": "services/parse-order.yaml",
+      "path": "services/validate-order.yaml",
       "kind": "Service",
-      "sha256": "05b4059dfc868d58f8c78f2f5593f262a2235ccc6d5dc127d9b1848d5bb288a0"
+      "sha256": "98905e65b358f4706ffa8b86a489c05004af60571f4509596e40b3d70d40e6dc"
+    },
+    {
+      "path": "services/enrich-customer.yaml",
+      "kind": "Service",
+      "sha256": "43afa53e36fc9a88498c36fd2e8809e552d94b99fe98aa6bc018d313bfef5531"
+    },
+    {
+      "path": "services/calculate-totals.yaml",
+      "kind": "Service",
+      "sha256": "07a0c67454bb15c8fda2ab813b503e5714c4a1b603688ef754e726c830cc8f55"
     }
   ]
 }

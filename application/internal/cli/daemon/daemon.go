@@ -7,12 +7,13 @@ import (
 	"time"
 
 	noredaemon "github.com/Muhammad-Jay/neuron/application/daemon"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/spf13/cobra"
 )
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "daemon",
+		Use:   command.Daemon,
 		Short: "Manage the local N.O.R.E. daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()

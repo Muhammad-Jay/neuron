@@ -4,12 +4,13 @@ import (
 	"fmt"
 
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/build"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/daemon"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/execution"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/initcmd"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/instance"
-	"github.com/Muhammad-Jay/neuron/application/internal/cli/run"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/register"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/run"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -17,7 +18,7 @@ import (
 var cfgFile string
 
 var RootCmd = &cobra.Command{
-	Use:   "neuron",
+	Use:   command.Neuron,
 	Short: "Neuron workflow engine CLI",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()

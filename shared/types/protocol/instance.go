@@ -10,15 +10,6 @@ import (
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
 )
 
-const (
-	HealthPath                = "/health"
-	InstancesPath             = "/v1/instances"
-	InstanceByIDPath          = "/v1/instances/%s"
-	ExecutePath               = "/v1/instances/%s/executions"
-	ExecutionEventsPath       = "/v1/instances/%s/executions/%s/events"
-	ExecutionEventsStreamPath = "/v1/instances/%s/executions/%s/events/stream"
-)
-
 type InstanceKey struct {
 	SystemID string `json:"system_id"`
 	Version  string `json:"version,omitempty"`

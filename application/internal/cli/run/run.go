@@ -10,6 +10,7 @@ import (
 
 	"github.com/Muhammad-Jay/neuron/application/client"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/parser"
 	"github.com/Muhammad-Jay/neuron/application/project"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
@@ -32,7 +33,7 @@ var (
 // New constructs and configures the Cobra command for executing Neuron systems.
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "run",
+		Use:   command.Run,
 		Short: "Run a Neuron System",
 		Long:  "Run a Neuron System using the internal N.O.R.E runtime execution engine.",
 		RunE:  runCmdHandler,

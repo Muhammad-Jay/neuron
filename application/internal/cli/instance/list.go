@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/render"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 	"github.com/spf13/cobra"
@@ -13,7 +14,7 @@ import (
 
 func newListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list [instance-id]",
+		Use:   command.InstanceList,
 		Short: "List instances or executions of a specific instance",
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  instanceListCmdHandler,

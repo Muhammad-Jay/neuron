@@ -6,13 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/config"
 	"github.com/spf13/cobra"
 )
 
 func New() *cobra.Command {
 	return &cobra.Command{
-		Use:   "init [Target]",
+		Use:   command.Init,
 		Short: "Initialize a new neuron workspace",
 		RunE:  initCmdHandler,
 	}

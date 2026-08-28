@@ -1,8 +1,7 @@
 package instance
 
 import (
-	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
-	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/spf13/cobra"
 )
 
@@ -10,7 +9,7 @@ var instanceID string
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "instance",
+		Use:   command.Instance,
 		Short: "Manage N.O.R.E. systems instances",
 		Long:  `Create, list, and manage running systems instances.`,
 		// If the user runs 'neuron instance' without a subcommand, show the help menu.
@@ -45,19 +44,19 @@ func New() *cobra.Command {
 	return cmd
 }
 
-func getInstance(cmd *cobra.Command, id string) (*protocol.InstanceResponse, error) {
-	ctx := cmd.Context()
-
-	c, cleanup, err := bootstrap.SetupClient(ctx)
-	if err != nil {
-		return &protocol.InstanceResponse{}, err
-	}
-	defer cleanup()
-
-	instance, err := c.GetInstanceById(ctx, id)
-	if err != nil {
-		return &protocol.InstanceResponse{}, err
-	}
-
-	return &instance, nil
-}
+//func getInstance(cmd *cobra.Command, id string) (*protocol.InstanceResponse, error) {
+//	ctx := cmd.Context()
+//
+//	c, cleanup, err := bootstrap.SetupClient(ctx)
+//	if err != nil {
+//		return &protocol.InstanceResponse{}, err
+//	}
+//	defer cleanup()
+//
+//	instance, err := c.GetInstanceById(ctx, id)
+//	if err != nil {
+//		return &protocol.InstanceResponse{}, err
+//	}
+//
+//	return &instance, nil
+//}
