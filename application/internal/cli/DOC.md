@@ -35,6 +35,7 @@ neuron build [flags]
 | Flag          | Description                           |
 | ------------- | ------------------------------------- |
 | `-w, --watch` | Watch for file changes and rebuild    |
+| `-r, --root`  | Set the project root directory        |
 
 ### `daemon`
 
@@ -124,15 +125,33 @@ neuron instance list -t <instance-id>
 
 ### `run`
 
-Run a Neuron System. The internal N.O.R.E. runtime executes the system.
+Run a registered Neuron System. The internal N.O.R.E. runtime executes the system.
+
+`run` executes only: it does **not** build, resolve, or parse the project. The system must be registered first with `neuron register`; the registration key is read from `.neuron/register.json` in the current directory. Running without a prior registration fails with a message pointing to `neuron register`.
+
+By default `run` streams live execution events; pass `--detach` to just print the execution handles.
 
 ```
 neuron run [flags]
 ```
 
-| Flag          | Description      |
-| ------------- | ---------------- |
-| `-v, --verbose` | Verbose output |
+| Flag             | Description                                             |
+| ---------------- | ------------------------------------------------------- |
+| `-v, --verbose`  | Verbose output, includes event payloads in the stream   |
+| `--input <json>` | JSON input payload for execution                        |
+| `--detach`       | Print execution handles immediately, no event streaming |
+
+### `register`
+
+Build, resolve, and register the current project with N.O.R.E. Registration stores the system durably (keyed by `systemID:version:hash:env`) without creating an instance; instances are created lazily on first execution.
+
+On success the server-confirmed registration key is written to `.neuron/register.json`, which `neuron run` reads.
+
+```
+neuron register [flags]
+```
+
+There are no `register`-specific flags; use `--remote` to target a N.O.R.E. endpoint and `--config` to select a config file.
 
 ### `completion`
 
