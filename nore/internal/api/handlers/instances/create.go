@@ -105,7 +105,7 @@ func (h *Handler) ensureRegistered(r *http.Request, req protocol.CreateInstanceR
 	}
 
 	now := time.Now().UTC()
-	_, err = h.systems.Register(ctx, system.RegisteredSystem{
+	_, _, err = h.systems.Register(ctx, system.RegisteredSystem{
 		Key:          key,
 		System:       *req.System,
 		RegisteredAt: now,

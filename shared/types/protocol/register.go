@@ -26,6 +26,7 @@ type RegisterStatus string
 const (
 	RegisterStatusRegistered        RegisterStatus = "registered"
 	RegisterStatusAlreadyRegistered RegisterStatus = "already_registered"
+	RegisterStatusReplaced          RegisterStatus = "replaced"
 )
 
 type RegisterResponse struct {

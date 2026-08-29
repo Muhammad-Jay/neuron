@@ -39,7 +39,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:               now,
 	}
 
-	created, err := h.systems.Register(r.Context(), reg)
+	created, replaced, err := h.systems.Register(r.Context(), reg)
 	if err != nil {
 		utils.ErrorJSON(w, http.StatusInternalServerError, err)
 		return
@@ -47,7 +47,11 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 
 	status := protocol.RegisterStatusRegistered
 	message := "system registered"
-	if !created {
+	switch {
+	case replaced:
+		status = protocol.RegisterStatusReplaced
+		message = "system replaced"
+	case !created:
 		status = protocol.RegisterStatusAlreadyRegistered
 		message = "system already registered"
 	}

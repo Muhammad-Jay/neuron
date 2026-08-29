@@ -18,6 +18,12 @@ type InstanceKey struct {
 	Env      string `json:"env,omitempty"`
 }
 
+// VersionLatest is the pseudo-version that resolves to the most recently
+// registered version of a system. It is used when a key omits the version or
+// explicitly asks for "latest". Resolution is time-based: whatever version was
+// registered last wins, regardless of semver ordering.
+const VersionLatest = "latest"
+
 func (k InstanceKey) String() string {
 	return fmt.Sprintf("%s@%s#%s:%s", k.SystemID, k.Version, k.Hash, k.Env)
 }
@@ -51,7 +57,7 @@ func ParseKey(s string) (InstanceKey, error) {
 
 	key := InstanceKey{
 		SystemID: parts[0],
-		Version:  "latest",
+		Version:  VersionLatest,
 	}
 	if key.SystemID == "" {
 		return InstanceKey{}, fmt.Errorf("instance key %q has no system id", s)

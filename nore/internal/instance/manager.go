@@ -85,30 +85,34 @@ func (m *Manager) GetByID(id string) (*Instance, bool) {
 // GetOrCreate returns the live runtime for key, lazily constructing it from
 // the durable RegisteredSystem when it is not already running. Registration
 // itself never creates an instance; this is the only entry point that does.
+// The key may be partial (systemID, systemID:latest, systemID:version); it is
+// resolved to its canonical form first so every addressing style shares the
+// same runtime.
 func (m *Manager) GetOrCreate(ctx context.Context, key protocol.InstanceKey) (*Instance, bool, error) {
-	m.mu.RLock()
-	previous, ok := m.instancesByKey[key]
-	m.mu.RUnlock()
-	if ok && (previous.Status() == StatusRunning || previous.Status() == StatusStarting) {
-		return previous, false, nil
-	}
-
 	reg, err := m.systems.Get(ctx, key)
 	if err != nil {
 		return nil, false, err
+	}
+	canonical := reg.Key
+
+	m.mu.RLock()
+	previous, ok := m.instancesByKey[canonical]
+	m.mu.RUnlock()
+	if ok && (previous.Status() == StatusRunning || previous.Status() == StatusStarting) {
+		return previous, false, nil
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	id := core2.NewID("inst_")
-	if previous, ok := m.instancesByKey[key]; ok {
+	if previous, ok := m.instancesByKey[canonical]; ok {
 		id = core2.ID(previous.ID)
-		delete(m.instancesByKey, key)
+		delete(m.instancesByKey, canonical)
 		delete(m.instancesByID, previous.ID)
 	}
 
-	i, err := New(m.parent, string(id), key, &reg.System, m.workers, m.store)
+	i, err := New(m.parent, string(id), canonical, &reg.System, m.workers, m.store)
 	if err != nil {
 		return nil, false, err
 	}
@@ -116,7 +120,7 @@ func (m *Manager) GetOrCreate(ctx context.Context, key protocol.InstanceKey) (*I
 		return nil, false, err
 	}
 
-	m.instancesByKey[key] = i
+	m.instancesByKey[canonical] = i
 	m.instancesByID[string(id)] = i
 	if err := m.metadata.Save(context.Background(), recordFor(i, i.Status())); err != nil {
 		log.Printf("persist instance metadata for %s: %v", i.ID, err)
