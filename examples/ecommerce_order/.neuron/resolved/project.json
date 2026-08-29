@@ -1,6 +1,6 @@
 {
   "formatVersion": "v1",
-  "resolvedAt": "2026-08-29T13:40:46.994620023Z",
+  "resolvedAt": "2026-08-29T14:19:09.055103458Z",
   "project": {
     "APIVersion": "neuron/v1",
     "Kind": "Project",
@@ -996,9 +996,14 @@
   ],
   "sourceFiles": [
     {
-      "path": "services/validate-order.yaml",
+      "path": "systems/order-processing/system.yaml",
+      "kind": "System",
+      "sha256": "af2d7c842b6da49323737ea3862b018256339b969ad587062ba7a6af0056ac9b"
+    },
+    {
+      "path": "services/enrich-customer.yaml",
       "kind": "Service",
-      "sha256": "98905e65b358f4706ffa8b86a489c05004af60571f4509596e40b3d70d40e6dc"
+      "sha256": "43afa53e36fc9a88498c36fd2e8809e552d94b99fe98aa6bc018d313bfef5531"
     },
     {
       "path": "services/authorize-payment.yaml",
@@ -1011,29 +1016,14 @@
       "sha256": "b724d40c9ff402e0510b170b01fe56c5af4c523396eb0fa4e382edcf2c13b085"
     },
     {
-      "path": "services/send-confirmation.yaml",
-      "kind": "Service",
-      "sha256": "74bf653d356311ede3450dad516974fc71a8bac648711e0a8bfee963256f362d"
-    },
-    {
-      "path": "services/parse-order.yaml",
-      "kind": "Service",
-      "sha256": "05b4059dfc868d58f8c78f2f5593f262a2235ccc6d5dc127d9b1848d5bb288a0"
-    },
-    {
-      "path": "services/enrich-customer.yaml",
-      "kind": "Service",
-      "sha256": "43afa53e36fc9a88498c36fd2e8809e552d94b99fe98aa6bc018d313bfef5531"
-    },
-    {
-      "path": "services/calculate-totals.yaml",
-      "kind": "Service",
-      "sha256": "07a0c67454bb15c8fda2ab813b503e5714c4a1b603688ef754e726c830cc8f55"
-    },
-    {
       "path": "services/create-shipment.yaml",
       "kind": "Service",
       "sha256": "6a579d16904ea35ff1ddc7d125fc1d81eb2d911d3bc5956a07b2fb3e7136f052"
+    },
+    {
+      "path": "services/send-confirmation.yaml",
+      "kind": "Service",
+      "sha256": "74bf653d356311ede3450dad516974fc71a8bac648711e0a8bfee963256f362d"
     },
     {
       "path": "neuron.yaml",
@@ -1041,9 +1031,19 @@
       "sha256": "e0eb65a62ec993ad92ee4c7291a123923a0125685624f9426abdb5d978eac160"
     },
     {
-      "path": "systems/order-processing/system.yaml",
-      "kind": "System",
-      "sha256": "af2d7c842b6da49323737ea3862b018256339b969ad587062ba7a6af0056ac9b"
+      "path": "services/validate-order.yaml",
+      "kind": "Service",
+      "sha256": "98905e65b358f4706ffa8b86a489c05004af60571f4509596e40b3d70d40e6dc"
+    },
+    {
+      "path": "services/parse-order.yaml",
+      "kind": "Service",
+      "sha256": "05b4059dfc868d58f8c78f2f5593f262a2235ccc6d5dc127d9b1848d5bb288a0"
+    },
+    {
+      "path": "services/calculate-totals.yaml",
+      "kind": "Service",
+      "sha256": "07a0c67454bb15c8fda2ab813b503e5714c4a1b603688ef754e726c830cc8f55"
     }
   ]
 }
