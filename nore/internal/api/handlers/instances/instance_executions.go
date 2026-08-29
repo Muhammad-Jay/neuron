@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/api/utils"
+	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
@@ -53,8 +54,23 @@ func (h *Handler) Execute(w http.ResponseWriter, r *http.Request) {
 	id := utils.PathID(r.PathValue("id"))
 	i, ok := h.instances.GetByID(id)
 	if !ok {
-		utils.ErrorJSON(w, http.StatusNotFound, fmt.Errorf("instance %s not found", id))
-		return
+		// Not an instance ID: resolve the segment as a system key
+		// (systemID:version:hash[:env]) and lazily create the runtime from
+		// the registered system.
+		key, err := protocol.ParseKey(id)
+		if err != nil {
+			utils.ErrorJSON(w, http.StatusNotFound, fmt.Errorf("instance %s not found", id))
+			return
+		}
+		i, _, err = h.instances.GetOrCreate(r.Context(), key)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, storage.ErrNotFound) {
+				status = http.StatusNotFound
+			}
+			utils.ErrorJSON(w, status, err)
+			return
+		}
 	}
 
 	var body struct {

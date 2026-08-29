@@ -12,8 +12,9 @@ const (
 	neuronDirectory   = ".neuron"
 	resolvedDirectory = "resolved"
 
-	resolvedProjectFile = "project.json"
-	resolvedManifestFile = "manifest.json"
+	resolvedProjectFile   = "project.json"
+	resolvedManifestFile  = "manifest.json"
+	registrationKeyFile   = "register.json"
 )
 
 type ArtifactManifest struct {
@@ -184,4 +185,55 @@ func LoadResolved(
 	}
 
 	return &project, nil
+}
+
+// RegistrationKeyPath returns the path where the last successfully registered
+// system key is persisted. It lives in the project's .neuron directory, but
+// outside .neuron/resolved so that command-invoked re-resolves (which clean the
+// resolved artifact) do not invalidate the registration.
+func RegistrationKeyPath(projectRoot string) string {
+	return filepath.Join(
+		projectRoot,
+		neuronDirectory,
+		registrationKeyFile,
+	)
+}
+
+// SaveRegistrationKey persists the key reported by a successful registration so
+// run-only flows (e.g. `neuron run`) can address the registered system without
+// re-building or re-parsing the project.
+func SaveRegistrationKey(projectRoot string, key any) error {
+	if key == nil {
+		return fmt.Errorf("registration key is nil")
+	}
+	path := RegistrationKeyPath(projectRoot)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create .neuron directory: %w", err)
+	}
+	data, err := json.MarshalIndent(key, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode registration key: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write registration key: %w", err)
+	}
+	return nil
+}
+
+// LoadRegistrationKey reads the key persisted by SaveRegistrationKey.
+func LoadRegistrationKey(projectRoot string, out any) error {
+	if out == nil {
+		return fmt.Errorf("registration key destination is nil")
+	}
+	data, err := os.ReadFile(RegistrationKeyPath(projectRoot))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ErrNotRegistered
+		}
+		return fmt.Errorf("read registration key: %w", err)
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("decode registration key: %w", err)
+	}
+	return nil
 }

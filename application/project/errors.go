@@ -11,4 +11,5 @@ var (
 	ErrCircularReference  = errors.New("circular project reference")
 	ErrResolvedNotFound   = errors.New("resolved project not found")
 	ErrUnsupportedKind    = errors.New("unsupported definition kind")
+	ErrNotRegistered      = errors.New("project is not registered")
 )

@@ -3,7 +3,9 @@ package run
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -11,7 +13,6 @@ import (
 	"github.com/Muhammad-Jay/neuron/application/client"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
-	"github.com/Muhammad-Jay/neuron/application/parser"
 	"github.com/Muhammad-Jay/neuron/application/project"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
@@ -46,7 +47,9 @@ func New() *cobra.Command {
 	return cmd
 }
 
-// runCmdHandler parses input flags, initializes client connections, and triggers system execution.
+// runCmdHandler loads the registered system key and triggers execution. It
+// deliberately does not build or parse the project: that is the responsibility
+// of `neuron register`. Running requires a prior registration.
 func runCmdHandler(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
@@ -54,18 +57,18 @@ func runCmdHandler(cmd *cobra.Command, args []string) error {
 		fmt.Println("Running in verbose mode.")
 	}
 
-	result, err := project.Resolve(ctx, project.DefaultOptions())
+	root, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("resolve project: %w", err)
+		return fmt.Errorf("get current directory: %w", err)
 	}
 
-	p := parser.NewParser(result.Project)
-	sys, err := p.ParseSystem()
-	if err != nil {
-		return fmt.Errorf("parse system: %w", err)
+	var key protocol.InstanceKey
+	if err := project.LoadRegistrationKey(root, &key); err != nil {
+		if errors.Is(err, project.ErrNotRegistered) {
+			return fmt.Errorf("project is not registered; run `neuron register` first")
+		}
+		return fmt.Errorf("load registration: %w", err)
 	}
-
-	key := p.GetInstanceKey()
 
 	c, cleanup, err := bootstrap.SetupClient(ctx)
 	if err != nil {
@@ -86,7 +89,7 @@ func runCmdHandler(cmd *cobra.Command, args []string) error {
 	//  and hide logs if `--detach`
 	mode := core.ExecutionModeDetach
 
-	execResult, err := c.Execute(ctx, key, sys, execInput, mode)
+	execResult, err := c.ExecuteByKey(ctx, key, execInput, mode)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/Muhammad-Jay/neuron/application/connection"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
@@ -109,6 +110,44 @@ func (c *Client) Execute(ctx context.Context, instanceKey protocol.InstanceKey, 
 	}
 
 	endpoint := fmt.Sprintf(protocol.ExecutePath, instance.ID)
+
+	if mode == "detach" {
+		var response struct {
+			Data protocol.ExecuteResponse `json:"data"`
+		}
+		if err := c.conn.Do(ctx, http.MethodPost, endpoint, req, &response); err != nil {
+			return protocol.ExecutionResult{}, err
+		}
+		return protocol.ExecutionResult{
+			ExecutionID: response.Data.ExecutionID,
+			InstanceID:  response.Data.InstanceID,
+			Status:      response.Data.Status,
+		}, nil
+	}
+
+	var response struct {
+		Data protocol.ExecutionResult `json:"data"`
+	}
+	if err := c.conn.Do(ctx, http.MethodPost, endpoint, req, &response); err != nil {
+		return protocol.ExecutionResult{}, err
+	}
+	return response.Data, nil
+}
+
+// ExecuteByKey triggers a workflow execution on the system identified by key,
+// without sending the system definition. The server lazily creates the instance
+// from the durable registered system on the first execution.
+func (c *Client) ExecuteByKey(ctx context.Context, key protocol.InstanceKey, input map[string]any, mode string) (protocol.ExecutionResult, error) {
+	if key.SystemID == "" {
+		return protocol.ExecutionResult{}, fmt.Errorf("instance SystemID is required")
+	}
+
+	req := protocol.ExecuteRequest{
+		Input: input,
+		Mode:  mode,
+	}
+
+	endpoint := fmt.Sprintf(protocol.ExecutePath, url.PathEscape(key.ColonString()))
 
 	if mode == "detach" {
 		var response struct {

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
@@ -19,6 +20,52 @@ type InstanceKey struct {
 
 func (k InstanceKey) String() string {
 	return fmt.Sprintf("%s@%s#%s:%s", k.SystemID, k.Version, k.Hash, k.Env)
+}
+
+// String returns the colon-encoded form used on the wire and in URL paths:
+// systemID:version:hash[:env]. Env is optional and defaults to development.
+func (k InstanceKey) ColonString() string {
+	version := k.Version
+	if version == "" {
+		version = "latest"
+	}
+	env := k.Env
+	if env == "" {
+		env = "development"
+	}
+	return fmt.Sprintf("%s:%s:%s:%s", k.SystemID, version, k.Hash, env)
+}
+
+// ParseKey parses a colon-encoded InstanceKey: systemID[:version[:hash[:env]]].
+// Missing version and hash default to latest and ""; an omitted env is left
+// empty so the server can resolve the registration regardless of environment.
+func ParseKey(s string) (InstanceKey, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return InstanceKey{}, fmt.Errorf("instance key is empty")
+	}
+	parts := strings.Split(s, ":")
+	if len(parts) > 4 {
+		return InstanceKey{}, fmt.Errorf("instance key %q has too many segments", s)
+	}
+
+	key := InstanceKey{
+		SystemID: parts[0],
+		Version:  "latest",
+	}
+	if key.SystemID == "" {
+		return InstanceKey{}, fmt.Errorf("instance key %q has no system id", s)
+	}
+	if len(parts) > 1 {
+		key.Version = parts[1]
+	}
+	if len(parts) > 2 {
+		key.Hash = parts[2]
+	}
+	if len(parts) > 3 {
+		key.Env = parts[3]
+	}
+	return key, nil
 }
 
 type CreateInstanceRequest struct {
