@@ -261,7 +261,7 @@ type RuntimeConfig struct {
 
 type RuntimeExecutionConfig struct {
 	// wait or detach.
-	DefaultMode string `yaml:"defaultMode,omitempty"`
+	Mode string `yaml:"mode,omitempty"`
 
 	// Duration string such as:
 	//
@@ -288,17 +288,9 @@ type WorkerConfig struct {
 type StorageConfig struct {
 	Provider string `yaml:"provider,omitempty"`
 
-	Local  LocalStorageConfig  `yaml:"local,omitempty"`
-	Remote RemoteStorageConfig `yaml:"remote,omitempty"`
-}
-
-type LocalStorageConfig struct {
+	// Directory is the storage provider's data directory. The storage
+	// implementation decides the individual subdirectories.
 	Directory string `yaml:"directory,omitempty"`
-}
-
-type RemoteStorageConfig struct {
-	Type string         `yaml:"type,omitempty"`
-	Config map[string]any `yaml:"config,omitempty"`
 }
 
 //
@@ -308,17 +300,13 @@ type RemoteStorageConfig struct {
 //
 
 type ExecutorsConfig struct {
-	Sources []ExecutorSource `yaml:"sources,omitempty"`
+	Registries []ExecutorRegistry `yaml:"registries,omitempty"`
 }
 
-type ExecutorSource struct {
-	Type string `yaml:"type"`
-
+type ExecutorRegistry struct {
 	Name string `yaml:"name,omitempty"`
 
-	URL string `yaml:"url,omitempty"`
-
-	Config map[string]any `yaml:"config,omitempty"`
+	URL string `yaml:"url"`
 }
 
 //

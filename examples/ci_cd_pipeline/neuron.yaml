@@ -23,7 +23,7 @@ system:
 
 runtime:
   execution:
-    defaultMode: wait
+    mode: wait
     timeout: 300s
   workers:
     min: 1
@@ -31,13 +31,12 @@ runtime:
 
 storage:
   provider: local
-  local:
-    directory: ./.neuron/data
+  directory: ./.neuron/data
 
 executors:
-  sources:
-    - type: builtin
-      name: neuron
+  registries:
+    - name: official
+      url: https://registry.neuron.dev
 
 inspector:
   enabled: true

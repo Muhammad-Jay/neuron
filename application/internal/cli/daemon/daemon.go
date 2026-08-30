@@ -7,6 +7,7 @@ import (
 	"time"
 
 	noredaemon "github.com/Muhammad-Jay/neuron/application/daemon"
+	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/spf13/cobra"
 )
@@ -33,8 +34,12 @@ func newStopCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Second)
 			defer cancel()
 
-			cfg := noredaemon.DefaultConfig()
-			manager := noredaemon.NewManager(cfg, nil)
+			cfg, ok := config.FromContext(cmd.Context())
+			if !ok {
+				return fmt.Errorf("configuration not loaded")
+			}
+
+			manager := noredaemon.NewManager(noredaemon.ConfigFromEffective(cfg), nil)
 
 			fmt.Println("Stopping N.O.R.E. daemon...")
 

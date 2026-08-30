@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/project"
@@ -24,7 +25,12 @@ func New() *cobra.Command {
 func registerCmdHandler(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	c, cleanup, err := bootstrap.SetupClient(ctx)
+	cfg, ok := config.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("configuration not loaded")
+	}
+
+	c, cleanup, err := bootstrap.SetupClient(ctx, bootstrap.Options{Config: cfg})
 	if err != nil {
 		return err
 	}
@@ -45,7 +51,7 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error {
 	request := protocol.RegisterRequest{
 		Key:                     key,
 		System:                  *sys,
-		ExecutionConfigurations: p.GetExecutorSources(),
+		ExecutionConfigurations: p.GetExecutorRegistries(),
 	}
 
 	result, err := c.Register(ctx, request)

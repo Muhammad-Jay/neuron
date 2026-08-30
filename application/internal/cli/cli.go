@@ -2,7 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/build"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/daemon"
@@ -12,7 +15,6 @@ import (
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/register"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/run"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var cfgFile string
@@ -31,19 +33,23 @@ func Execute() error {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
-
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is ./neuron.yaml)")
+	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "project config file (defaults to ./neuron.yaml)")
 	RootCmd.PersistentFlags().String("log-level", "info", "Set the systems logging level")
-
-	// Add global verbose and remote flags
 	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output (shows N.O.R.E. daemon logs)")
 	RootCmd.PersistentFlags().String("remote", "", "Remote N.O.R.E. endpoint (e.g., https://api.nore.example.com)")
+	RootCmd.PersistentFlags().String("nore-path", "", "Path to the nore daemon binary")
 
-	// Bind flags to Viper so we can access them anywhere without passing variables around
-	_ = viper.BindPFlag("log_level", RootCmd.PersistentFlags().Lookup("log-level"))
-	_ = viper.BindPFlag("verbose", RootCmd.PersistentFlags().Lookup("verbose"))
-	_ = viper.BindPFlag("remote", RootCmd.PersistentFlags().Lookup("remote"))
+	// Load the effective configuration once flags are parsed and inject it on
+	// the command context so every subcommand can read it without touching
+	// Viper itself.
+	RootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		cfg, err := loadConfig(cmd)
+		if err != nil {
+			return err
+		}
+		cmd.SetContext(config.NewContext(cmd.Context(), cfg))
+		return nil
+	}
 
 	RootCmd.AddCommand(
 		run.New(),
@@ -56,19 +62,33 @@ func init() {
 	)
 }
 
-func initConfig() {
+// loadConfig assembles the effective configuration from the resolved project
+// directory and the parsed command-line overrides.
+func loadConfig(cmd *cobra.Command) (config.Config, error) {
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return config.Config{}, fmt.Errorf("get current directory: %w", err)
+	}
+
+	cli := map[string]any{}
+
+	if remote, _ := cmd.Flags().GetString("remote"); remote != "" {
+		cli["daemon.endpoint"] = remote
+	}
+	if path, _ := cmd.Flags().GetString("nore-path"); path != "" {
+		cli["daemon.norePath"] = path
+	}
+
+	opts := config.Options{
+		ProjectDir:  projectDir,
+		Environment: true,
+		CLI:         cli,
+	}
+
 	if cfgFile != "" {
-		viper.SetConfigFile(cfgFile)
-	} else {
-		viper.AddConfigPath(".")
-		viper.SetConfigName("neuron")
-		viper.SetConfigType("yaml")
+		opts.ProjectPath = cfgFile
+		opts.ProjectDir = filepath.Dir(cfgFile)
 	}
 
-	viper.SetEnvPrefix("neuron")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Println("Using config file:", viper.ConfigFileUsed())
-	}
+	return config.Load(opts)
 }

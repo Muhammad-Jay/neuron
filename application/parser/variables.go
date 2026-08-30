@@ -30,8 +30,8 @@ func NewVariableResolver(project *project.ProjectFile) *VariableResolver {
 
 	flattenVariables("", project.Variables, vars)
 
-	if project.Runtime.Execution.DefaultMode != "" {
-		vars["runtime.execution.defaultMode"] = project.Runtime.Execution.DefaultMode
+	if project.Runtime.Execution.Mode != "" {
+		vars["runtime.execution.mode"] = project.Runtime.Execution.Mode
 	}
 	if project.Runtime.Execution.Timeout != "" {
 		vars["runtime.execution.timeout"] = project.Runtime.Execution.Timeout
@@ -46,14 +46,13 @@ func NewVariableResolver(project *project.ProjectFile) *VariableResolver {
 	if project.Storage.Provider != "" {
 		vars["storage.provider"] = project.Storage.Provider
 	}
-	if project.Storage.Local.Directory != "" {
-		vars["storage.local.directory"] = project.Storage.Local.Directory
+	if project.Storage.Directory != "" {
+		vars["storage.directory"] = project.Storage.Directory
 	}
 
-	for _, src := range project.Executors.Sources {
-		if src.Name != "" {
-			vars["executors.sources."+src.Name+".type"] = src.Type
-			vars["executors.sources."+src.Name+".url"] = src.URL
+	for _, reg := range project.Executors.Registries {
+		if reg.Name != "" {
+			vars["executors.registries."+reg.Name+".url"] = reg.URL
 		}
 	}
 

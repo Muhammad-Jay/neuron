@@ -166,8 +166,8 @@ func (p Parser) GetInstanceKey() protocol.InstanceKey {
 }
 
 func (p Parser) getEnvironment() string {
-	if p.data.Project.Runtime.Execution.DefaultMode != "" {
-		return p.data.Project.Runtime.Execution.DefaultMode
+	if p.data.Project.Runtime.Execution.Mode != "" {
+		return p.data.Project.Runtime.Execution.Mode
 	}
 	return "development"
 }
@@ -180,8 +180,8 @@ func (p Parser) GetStorageConfig() project.StorageConfig {
 	return p.data.Project.Storage
 }
 
-func (p Parser) GetExecutorSources() []project.ExecutorSource {
-	return p.data.Project.Executors.Sources
+func (p Parser) GetExecutorRegistries() []project.ExecutorRegistry {
+	return p.data.Project.Executors.Registries
 }
 
 func (p Parser) GetInspectorConfig() project.InspectorConfig {

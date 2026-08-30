@@ -8,45 +8,53 @@ import (
 	"path/filepath"
 
 	"github.com/Muhammad-Jay/neuron/application/client"
+	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/connection"
 	"github.com/Muhammad-Jay/neuron/application/daemon"
 	"github.com/Muhammad-Jay/neuron/application/runtime"
-	"github.com/spf13/viper"
 )
+
+// Options carries everything SetupClient needs. It is filled in by the CLI
+// layer so bootstrap never has to read configuration or flags itself.
+type Options struct {
+	Config config.Config
+
+	// Verbose controls whether a spawned local daemon attaches its output.
+	Verbose bool
+}
 
 // SetupClient initializes the connection, ensures the daemon is running
 // (if local), and returns the initialized client alongside a cleanup function.
-func SetupClient(ctx context.Context) (*client.Client, func(), error) {
-	remoteURL := viper.GetString("remote")
-	isRemote := remoteURL != ""
-	isVerbose := viper.GetBool("verbose")
+func SetupClient(ctx context.Context, opts Options) (*client.Client, func(), error) {
+	cfg := opts.Config
 
 	var conn connection.Connection
 
-	if isRemote {
+	if cfg.Daemon.Endpoint != "" {
 		// Use HTTP for remote execution (No daemon needed)
-		conn = connection.New(connection.NewHTTPTransport(nil, remoteURL))
+		conn = connection.New(connection.NewHTTPTransport(nil, cfg.Daemon.Endpoint))
 	} else {
 		// Use Unix Socket for local execution
-		conn = connection.New(connection.NewLocal(client.DefaultSocketPath()))
+		conn = connection.New(connection.NewLocal(cfg.Daemon.Socket))
 	}
 
-	cfg := daemon.DefaultConfig()
-	binaryPath, err := NoreBinaryPath()
+	dCfg := daemon.ConfigFromEffective(cfg)
+
+	binaryPath, err := NoreBinaryPath(cfg)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// MAGIC: AttachOutput controls whether the daemon prints to the console!
 	// If false, the daemon runs silently in the background.
-	cfg.AttachOutput = isVerbose
-	cfg.BinaryPath = binaryPath
+	dCfg.AttachOutput = opts.Verbose
+	dCfg.BinaryPath = binaryPath
 
-	rtManager := runtime.NewManager(cfg, conn)
+	rtManager := runtime.NewManager(dCfg, conn)
 
 	// Ensure N.O.R.E is running & accessible
-	// If isRemote == true, this simply pings the remote server and skips the daemon!
-	if err := rtManager.Ensure(ctx, isRemote); err != nil {
+	// If daemon.Endpoint is set, we simply ping the remote server and skip the daemon!
+	if err := rtManager.Ensure(ctx, cfg.Daemon.Endpoint != ""); err != nil {
 		_ = conn.Close()
 		return nil, nil, fmt.Errorf("failed to ensure N.O.R.E runtime: %w", err)
 	}
@@ -61,13 +69,15 @@ func SetupClient(ctx context.Context) (*client.Client, func(), error) {
 	return c, cleanup, nil
 }
 
-func NoreBinaryPath() (string, error) {
-	// 1. Allow override via Viper/Env (e.g., NEURON_NORE_PATH=/usr/bin/nore)
-	if customPath := viper.GetString("nore_path"); customPath != "" {
+// NoreBinaryPath resolves the nore binary, honoring an explicit config path
+// first, then the PATH, then a local development fallback.
+func NoreBinaryPath(cfg config.Config) (string, error) {
+	// 1. Allow override via config (e.g., NEURON_NORE_PATH=/usr/bin/nore)
+	if customPath := cfg.Daemon.NorePath; customPath != "" {
 		return customPath, nil
 	}
 
-	// 2. Check if "nore" is installed globally in the systems's PATH
+	// 2. Check if "nore" is installed globally in the system's PATH
 	if path, err := exec.LookPath("nore"); err == nil {
 		return path, nil
 	}

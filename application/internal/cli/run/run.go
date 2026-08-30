@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Muhammad-Jay/neuron/application/client"
+	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/project"
@@ -70,7 +71,15 @@ func runCmdHandler(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load registration: %w", err)
 	}
 
-	c, cleanup, err := bootstrap.SetupClient(ctx)
+	cfg, ok := config.FromContext(cmd.Context())
+	if !ok {
+		return fmt.Errorf("configuration not loaded")
+	}
+
+	c, cleanup, err := bootstrap.SetupClient(ctx, bootstrap.Options{
+		Config:  cfg,
+		Verbose: verbose,
+	})
 	if err != nil {
 		return err
 	}

@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/render"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func newListCmd() *cobra.Command {
@@ -26,10 +26,6 @@ func newListCmd() *cobra.Command {
 
 	cmd.MarkFlagsMutuallyExclusive("all", "status", "target")
 
-	_ = viper.BindPFlag("instance.list.all", cmd.Flags().Lookup("all"))
-	_ = viper.BindPFlag("instance.list.status", cmd.Flags().Lookup("status"))
-	_ = viper.BindPFlag("instance.list.target", cmd.Flags().Lookup("target"))
-
 	return cmd
 }
 
@@ -44,16 +40,16 @@ func instanceListCmdHandler(cmd *cobra.Command, args []string) error {
 	}
 
 	if instanceID != "" {
-		return listInstanceExecutions(ctx, instanceID)
+		return listInstanceExecutions(ctx, cmd, instanceID)
 	}
 
-	return listInstances(ctx)
+	return listInstances(ctx, cmd)
 }
 
 // resolveInstanceID returns the instance ID given either as the first
 // positional argument or via the --target flag. Providing both is an error.
 func resolveInstanceID(cmd *cobra.Command, args []string) (string, error) {
-	flagID := viper.GetString("instance.list.target")
+	flagID, _ := cmd.Flags().GetString("target")
 
 	if len(args) > 0 && flagID != "" {
 		return "", fmt.Errorf("instance specified both as argument and --target; use only one")
@@ -67,11 +63,16 @@ func resolveInstanceID(cmd *cobra.Command, args []string) (string, error) {
 }
 
 // listInstances lists instances, honoring the --all and --status filters.
-func listInstances(ctx context.Context) error {
-	showAll := viper.GetBool("instance.list.all")
-	statusFilter := viper.GetString("instance.list.status")
+func listInstances(ctx context.Context, cmd *cobra.Command) error {
+	showAll, _ := cmd.Flags().GetBool("all")
+	statusFilter, _ := cmd.Flags().GetString("status")
 
-	c, cleanup, err := bootstrap.SetupClient(ctx)
+	cfg, ok := config.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("configuration not loaded")
+	}
+
+	c, cleanup, err := bootstrap.SetupClient(ctx, bootstrap.Options{Config: cfg})
 	if err != nil {
 		return err
 	}
@@ -101,8 +102,13 @@ func listInstances(ctx context.Context) error {
 }
 
 // listInstanceExecutions lists all executions recorded for the given instance.
-func listInstanceExecutions(ctx context.Context, instanceID string) error {
-	c, cleanup, err := bootstrap.SetupClient(ctx)
+func listInstanceExecutions(ctx context.Context, cmd *cobra.Command, instanceID string) error {
+	cfg, ok := config.FromContext(ctx)
+	if !ok {
+		return fmt.Errorf("configuration not loaded")
+	}
+
+	c, cleanup, err := bootstrap.SetupClient(ctx, bootstrap.Options{Config: cfg})
 	if err != nil {
 		return err
 	}
