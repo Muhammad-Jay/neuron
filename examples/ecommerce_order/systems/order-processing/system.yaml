@@ -45,7 +45,7 @@ connectors:
     mappings:
       - target: items
         expression: "execution.input.order.items"
-      - target: tier
+      - target: customer_tier
         expression: "source.output.customer_data.tier"
       - target: shipping_state
         expression: "source.output.customer_data.shipping_address.state"
@@ -58,7 +58,7 @@ connectors:
       - target: amount_cents
         expression: "execution.input.order.total"
       - target: currency
-        expression: "source.output.currency"
+        expression: "execution.input.order.currency"
       - target: email
         expression: "source.output.email"
 

@@ -1,6 +1,6 @@
 {
   "formatVersion": "v1",
-  "resolvedAt": "2026-08-29T14:19:09.055103458Z",
+  "resolvedAt": "2026-08-30T14:17:23.370214048Z",
   "project": {
     "APIVersion": "neuron/v1",
     "Kind": "Project",
@@ -21,7 +21,7 @@
     },
     "Runtime": {
       "Execution": {
-        "DefaultMode": "wait",
+        "Mode": "wait",
         "Timeout": "120s"
       },
       "Workers": {
@@ -31,21 +31,13 @@
     },
     "Storage": {
       "Provider": "local",
-      "Local": {
-        "Directory": "./.neuron/data"
-      },
-      "Remote": {
-        "Type": "",
-        "Config": null
-      }
+      "Directory": "./.neuron/data"
     },
     "Executors": {
-      "Sources": [
+      "Registries": [
         {
-          "Type": "builtin",
-          "Name": "neuron",
-          "URL": "",
-          "Config": null
+          "Name": "official",
+          "URL": "https://registry.neuron.dev"
         }
       ]
     },
@@ -149,7 +141,7 @@
               "Name": "",
               "Direction": "",
               "Source": "",
-              "Target": "tier",
+              "Target": "customer_tier",
               "Expression": "source.output.customer_data.tier"
             },
             {
@@ -186,7 +178,7 @@
               "Direction": "",
               "Source": "",
               "Target": "currency",
-              "Expression": "source.output.currency"
+              "Expression": "execution.input.order.currency"
             },
             {
               "Name": "",
@@ -797,7 +789,7 @@
               "Name": "",
               "Direction": "",
               "Source": "",
-              "Target": "tier",
+              "Target": "customer_tier",
               "Expression": "source.output.customer_data.tier"
             },
             {
@@ -844,7 +836,7 @@
               "Direction": "",
               "Source": "",
               "Target": "currency",
-              "Expression": "source.output.currency"
+              "Expression": "execution.input.order.currency"
             },
             {
               "Name": "",
@@ -996,16 +988,6 @@
   ],
   "sourceFiles": [
     {
-      "path": "systems/order-processing/system.yaml",
-      "kind": "System",
-      "sha256": "af2d7c842b6da49323737ea3862b018256339b969ad587062ba7a6af0056ac9b"
-    },
-    {
-      "path": "services/enrich-customer.yaml",
-      "kind": "Service",
-      "sha256": "43afa53e36fc9a88498c36fd2e8809e552d94b99fe98aa6bc018d313bfef5531"
-    },
-    {
       "path": "services/authorize-payment.yaml",
       "kind": "Service",
       "sha256": "a04445c6782f3fe529596bccc379d780fb79ee6cb6c388a810872ad36b9d878d"
@@ -1026,19 +1008,29 @@
       "sha256": "74bf653d356311ede3450dad516974fc71a8bac648711e0a8bfee963256f362d"
     },
     {
+      "path": "services/parse-order.yaml",
+      "kind": "Service",
+      "sha256": "05b4059dfc868d58f8c78f2f5593f262a2235ccc6d5dc127d9b1848d5bb288a0"
+    },
+    {
+      "path": "services/enrich-customer.yaml",
+      "kind": "Service",
+      "sha256": "43afa53e36fc9a88498c36fd2e8809e552d94b99fe98aa6bc018d313bfef5531"
+    },
+    {
       "path": "neuron.yaml",
       "kind": "Project",
-      "sha256": "e0eb65a62ec993ad92ee4c7291a123923a0125685624f9426abdb5d978eac160"
+      "sha256": "d0bdc55efd1942f1c45d4703461b3e77ecad4fd7570fd2eafc40f2ff55af4260"
+    },
+    {
+      "path": "systems/order-processing/system.yaml",
+      "kind": "System",
+      "sha256": "6457dbb048042e8cd5b2c4d3e05959e062656e63286f9755c6fa6d6aa2bb9f4f"
     },
     {
       "path": "services/validate-order.yaml",
       "kind": "Service",
       "sha256": "98905e65b358f4706ffa8b86a489c05004af60571f4509596e40b3d70d40e6dc"
-    },
-    {
-      "path": "services/parse-order.yaml",
-      "kind": "Service",
-      "sha256": "05b4059dfc868d58f8c78f2f5593f262a2235ccc6d5dc127d9b1848d5bb288a0"
     },
     {
       "path": "services/calculate-totals.yaml",
