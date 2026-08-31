@@ -2,7 +2,6 @@ go 1.26.5
 
 use (
 	./nore
-	./internals/development
 	./application
 	./shared
 	examples/simple_response

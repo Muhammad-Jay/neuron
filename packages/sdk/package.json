@@ -1,0 +1,32 @@
+{
+  "name": "@neuron/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for defining Neuron systems",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . --max-warnings 0",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "eslint": "^9.39.1",
+    "tsup": "^8.0.1",
+    "typescript": "5.9.2",
+    "vitest": "^3.0.0"
+  }
+}
