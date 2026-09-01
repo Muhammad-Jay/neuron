@@ -10,7 +10,10 @@ export interface SystemManifest {
 
   services: ServiceManifest[];
 
+  inputs?: PortManifest[];
+
   connectors: ConnectorManifest[];
+
 
   definition: SystemNodeManifest;
 }
@@ -37,7 +40,7 @@ export interface ServiceManifest {
 
   config: Record<string, unknown>;
 
-  execution: {
+  execution?: {
     mode?: string;
     timeout?: string;
     retries?: number;
@@ -50,6 +53,8 @@ export interface PortManifest {
   name: string;
   type: "any" | "string" | "number" | "boolean" | "object" | "array";
   required: boolean;
+  /** Optional schema validation rules produced from a runtime schema builder. */
+  rules?: Record<string, unknown>;
 }
 
 export interface ConnectorManifest {

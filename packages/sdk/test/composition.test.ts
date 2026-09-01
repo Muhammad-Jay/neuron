@@ -1,53 +1,35 @@
 import { describe, it, expect } from "vitest";
 import { Parallel } from "../src/composition.js";
 import { Service } from "../src/service.js";
+import { System } from "../src/system.js";
+import { string } from "../src/schema.js";
 
 describe("Parallel", () => {
-  it("creates a parallel node from services", () => {
+  it("creates a parallel node from composition nodes", () => {
     const a = Service("a");
     const b = Service("b");
 
-    const node = Parallel(a, b);
-    expect(node).toEqual({
-      kind: "parallel",
-      branches: [
-        { kind: "service", service: "a" },
-        { kind: "service", service: "b" },
-      ],
-    });
+    const node = Parallel(a.withInput({}), b.withInput({}));
+    expect(node._composition.kind).toBe("parallel");
+    expect(node._composition.branches).toHaveLength(2);
   });
 
-  it("creates a parallel node from manifest nodes", () => {
-    const node = Parallel(
-      { kind: "service", service: "a" },
-      { kind: "service", service: "b" }
-    );
-    expect(node).toEqual({
-      kind: "parallel",
-      branches: [
-        { kind: "service", service: "a" },
-        { kind: "service", service: "b" },
-      ],
-    });
-  });
-
-  it("creates a parallel node from mixed types", () => {
-    const a = Service("a");
-    const b = { kind: "service" as const, service: "b" };
-
-    const node = Parallel(a, b);
-    expect(node.branches).toHaveLength(2);
-  });
-
-  it("works with nested parallel", () => {
+  it("produces a flat manifest tree", () => {
     const a = Service("a");
     const b = Service("b");
     const c = Service("c");
 
-    const node = Parallel(a, Parallel(b, c));
-    expect(node).toEqual({
-      kind: "parallel",
-      branches: [
+    const sys = System("test")
+      .version("1.0.0")
+      .registerAll(a, b, c)
+      .run(
+        a.withInput({}).then(Parallel(b.withInput({}), c.withInput({})))
+      );
+
+    const manifest = sys.toManifest();
+    expect(manifest.definition).toEqual({
+      kind: "sequence",
+      steps: [
         { kind: "service", service: "a" },
         {
           kind: "parallel",
@@ -60,22 +42,25 @@ describe("Parallel", () => {
     });
   });
 
-  it("works in a .then() chain", () => {
-    const verify = Service("verify");
-    const save = Service("save");
-    const notify = Service("notify");
+  it("works with services carrying bindings in parallel branches", () => {
+    const verify = Service("verify").outputSchema({ email: string() });
+    const send = Service("send").inputSchema({ email: string().required() });
+    const log = Service("log").inputSchema({ email: string().required() });
 
-    const seq = verify.then(Parallel(save, notify));
-    expect(seq.kind).toBe("sequence");
-    expect(seq.steps).toEqual([
-      { kind: "service", service: "verify" },
-      {
-        kind: "parallel",
-        branches: [
-          { kind: "service", service: "save" },
-          { kind: "service", service: "notify" },
-        ],
-      },
+    const sys = System("test")
+      .version("1.0.0")
+      .registerAll(verify, send, log)
+      .run(
+        verify.withInput({}).then(Parallel(
+          send.withInput({ email: verify.output.email }),
+          log.withInput({ email: verify.output.email })
+        ))
+      );
+
+    const manifest = sys.toManifest();
+    expect(manifest.connectors).toHaveLength(2);
+    expect(manifest.connectors[0].mappings).toEqual([
+      { target: "email", expression: "source.output.email" },
     ]);
   });
 });

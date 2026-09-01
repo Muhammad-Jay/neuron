@@ -1,38 +1,56 @@
-export { System, type SystemDefinition } from "./system.js";
-
 export {
   Service,
   ServiceDefinition,
-  Input,
-  Output,
-  type InputBinding,
-  type SequenceNode,
+  CompositionNode,
+  SequenceNode,
+  ParallelCompositionHolder,
 } from "./service.js";
+export type {
+  Connection,
+  ExecutionConfig,
+  Composition,
+  InputBindings,
+  InputValue,
+  ServiceReference,
+} from "./service.js";
+
+export { System, SystemDefinition } from "./system.js";
 
 export { Parallel } from "./composition.js";
 
-export { source, exec, type Expression, type ExpressionBuilder } from "./expr.js";
+export { connect } from "./connection.js";
 
 export {
-  map,
-  inputMapping,
-  outputMapping,
-} from "./mapping.js";
-
-export {
-  validate,
-  required,
   string,
   number,
   boolean,
-  array,
-  object,
-  type ValidationRule,
-  type StringValidator,
-  type NumberValidator,
-  type ArrayValidator,
-  type ObjectValidator,
-} from "./validation.js";
+  list,
+  record,
+} from "./schema.js";
+export type {
+  Schema,
+  SchemaField,
+  Infer,
+  InferSchema,
+  SchemaObject,
+  StringField,
+  NumberField,
+  BooleanField,
+  ListField,
+  RecordField,
+  FieldRules,
+} from "./schema.js";
+
+export {
+  createExpressionProxy,
+} from "./expression.js";
+export type {
+  Expression,
+  Expressionify,
+  ExpressionArray,
+  SourceContext,
+  ExecutionContext,
+} from "./expression.js";
 
 export type {
   SystemManifest,
