@@ -1,9 +1,9 @@
 package loader
 
 type Loader struct {
-	loader Contract
+	Handler Contract
 }
 
 func New(loader Contract) *Loader {
-	return &Loader{loader: loader}
+	return &Loader{Handler: loader}
 }

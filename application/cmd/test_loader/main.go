@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Muhammad-Jay/neuron/application/loader"
+	"github.com/Muhammad-Jay/neuron/application/loader/typescript"
 	"github.com/Muhammad-Jay/neuron/application/process"
 )
 
@@ -14,13 +16,12 @@ func main() {
 		Env: append(os.Environ()),
 	}
 
-	proc := process.NewProcess(cmd)
+	tsLoader := typescript.NewTSLoader(cmd)
 
-	output, err := proc.Run()
+	ld := loader.New(tsLoader)
+
+	err := ld.Handler.Build()
 	if err != nil {
 		fmt.Println(err)
-		return
 	}
-
-	fmt.Println("Output:", output)
 }

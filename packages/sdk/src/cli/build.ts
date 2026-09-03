@@ -1,11 +1,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path"
 import { discoverProject } from "./project";
 import { loadConfig } from "./config";
+import {createJiti} from "jiti";
+import {SystemManifest} from "@/manifest";
+import * as process from "node:process";
 
-export async function buildCmdHandler(): Promise<void> {
-  const project = discoverProject()
+export async function buildCmdHandler(projectDir: string = process.cwd()): Promise<void> {
+  const project = discoverProject(projectDir)
   const config = await loadConfig(project.configFile)
 
   console.log("Building...")
@@ -20,12 +22,17 @@ export async function buildCmdHandler(): Promise<void> {
   console.log("Manifest written to:", project.outputFile);
 }
 
-export async function loadManifest(filePath: string): Promise<unknown> {
-  const module = await import(pathToFileURL(filePath).href)
-  return module.default;
+export async function loadManifest(filePath: string): Promise<SystemManifest | undefined> {
+  try {
+    const jiti = createJiti(import.meta.url);
+    const module = await jiti.import<{default?: SystemManifest}>(filePath)
+    return module.default;
+  }catch (error) {
+    throw error
+  }
 }
 
-export async function saveManifest(outputPath: string, manifest: unknown): Promise<void> {
+export async function saveManifest(outputPath: string, manifest: SystemManifest | undefined): Promise<void> {
   if (!outputPath) {
     throw new Error("output path is missing.")
   }
