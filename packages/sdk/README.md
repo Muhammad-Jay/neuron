@@ -1,24 +1,8 @@
 # @neuron/sdk
 
-A TypeScript SDK for defining **Neuron systems** declaratively. It composes services, connectors, mappings, and validations into a typed, JSON serializable `SystemManifest` that the Neuron runtime (Go parser/compiler) consumes.
+A TypeScript SDK for **declaratively defining composable, executable systems**. You describe services, their inputs and outputs, how they connect, and the overall flow of execution — the SDK compiles that description into a portable, JSON-serializable **manifest** that an execution engine later runs.
 
-The SDK is a **system definition language**, not a runtime — it produces a manifest that describes *what* your system does; the N.O.R.E. runtime is responsible for *executing* it.
-
-## Architecture
-
-```
-┌─────────────────────┐      ┌──────────────────────────┐      ┌──────────────────┐
-│  TypeScript SDK      │      │  SystemManifest (JSON)   │      │  Go parser/nore   │
-│  (this package)      │ ───► │  services + connectors   │ ───► │  core.System       │
-│  declarative API     │      │  + definition tree       │      │  N.O.R.E. runtime  │
-└─────────────────────┘      └──────────────────────────┘      └──────────────────┘
-```
-
-The SDK compiles your composition tree and produces a manifest that contains:
-
-- **`services`** — a flattened list of every service definition
-- **`connectors`** — a flattened list of every connection between services, including mappings and validations
-- **`definition`** — the composition tree (sequence / parallel / service nodes)
+The SDK is a **definition layer**, not a runtime. It produces a manifest that describes *what* your system does; the actual execution is handled by whatever runtime consumes the manifest.
 
 ## Installation
 
@@ -26,292 +10,308 @@ The SDK compiles your composition tree and produces a manifest that contains:
 pnpm add @neuron/sdk
 ```
 
-This SDK is part of a pnpm workspace. To build and run its tests:
-
-```bash
-pnpm build:sdk       # builds packages/sdk → dist/
-pnpm test:sdk        # runs vitest
-pnpm typecheck:sdk   # runs tsc --noEmit
-```
-
 ## Quick Start
 
 The smallest complete system:
 
 ```ts
-import { System, Service } from "@neuron/sdk";
+import { Service, System } from "@neuron/sdk";
 
-const hello = Service("hello")
-  .executor("set", { message: "Hello, world!" });
+const hello = Service({ name: "hello" })
+  .executor({ name: "set" });
 
-const manifest = System("my-system")
-  .version("1.0.0")
-  .register(hello)
+const manifest = System({
+  name: "my-system",
+  version: "1.0.0",
+})
   .run(hello)
   .toManifest();
 
 console.log(JSON.stringify(manifest, null, 2));
 ```
 
-`toManifest()` throws if the system is missing a version, has no definition, or references a service that wasn't registered.
+`toManifest()` throws if the system is missing a version, has no definition, or references a service that was never defined.
 
 ## Core Concepts
 
 ### Service
 
-A `Service` represents a unit of work with an **executor**, **configuration**, **input/output ports**, and **mappings**. Create one with the `Service(ref)` factory:
+A `Service` is a unit of work. It has an **identity** (name, version, optional description), an **executor** (what will actually run it), and — optionally — typed **input/output contracts**.
 
 ```ts
-import { Service, exec, source } from "@neuron/sdk";
+import { Service } from "@neuron/sdk";
 
-const validateOrder = Service("validate-order")
-  .description("Validate incoming order request")
-  .version("1.0.0")
-  .executor("set", { status: "validated", valid: true })
-  .input({ order: exec.input("order") })
-  .output("valid", "status")
-  .execution({ mode: "wait", timeout: "5s" });
+const validateOrder = Service({
+  name: "validate-order",
+  version: "1.0.0",
+  description: "Validate incoming order request",
+}).executor({ name: "set" });
 ```
 
-#### Typed services
+#### Identity
 
-`Service` is generic over input, output, and config shapes for type safety:
+Declare the service's name, version, and description once, up front:
 
 ```ts
-interface VerifyInput { customer_id: string; email: string; }
-interface VerifyOutput { verified: boolean; tier: string; }
-
-const verify = Service<VerifyInput, VerifyOutput>("customer.verify")
-  .executor("http.post", { timeout: 30 })
-  .input({
-    customer_id: exec.input("order.customer_id"),
-    email: exec.input("order.email"),
-  })
-  .output("verified", "tier");
+Service({
+  name: "http.get",
+  version: "1.0.0",
+  description: "Fetch a resource over HTTP",
+})
 ```
 
-#### Service builder methods
+#### Executor
 
-| Method | Description |
-| --- | --- |
-| `.executor(type, config?)` | Set the executor type and optional executor config (timeout, retries, etc.). Set in the manifest's `executor.config`. |
-| `.executorVersion(v)` | Set the executor version. |
-| `.executorSource(s)` | Set the executor source/registry. |
-| `.version(v)` | Set the service version. |
-| `.description(d)` | Set the service description. |
-| `.config(cfg)` | Set arbitrary service config. Typed via the `TConfig` generic. |
-| `.input(bindings)` | Declare input ports and bind each to an expression. Each entry adds an input port and an input mapping. |
-| `.inputs(...ports)` | Declare input ports explicitly as `PortManifest`s (for installable packages). |
-| `.outputs(...ports)` | Declare output ports explicitly as `PortManifest`s. |
-| `.output(...names)` | Declare output port names (each of type `any`). |
-| `.validateInput(field, rules)` | Add a service-level input validation rule. |
-| `.execution(settings)` | Set runtime execution settings: `mode`, `timeout`, `retries`, `concurrency`, `continueOnFail`. |
-| `.then(next, options?)` | Chain this service to the next service/node. See [Composition](#composition). |
-| `.node()` | Return a `SystemNodeManifest` referencing this service. |
-| `.toManifest()` | Return the `ServiceManifest` for this service. |
-
-Note: `.executor(type, config)` sets the executor config, while `.config()` sets the service configuration — they are separate fields in the manifest.
-
-### Expressions
-
-Expressions are **CEL (Common Expression Language) strings** compatible with N.O.R.E.'s resolver. Two environment builders are provided: `source` and `exec`.
-
-Expressions are type-safe (branded strings) but coerce to plain strings automatically in template literals / `String()`. They also carry comparison methods.
-
-#### `source.*` — the upstream service's environment
-
-Available inside connector mappings and validations. Represents the output of the service a connector originates from.
+An executor is what actually runs the service. By default, the executor name equals the service name, with version `latest` and a local registry:
 
 ```ts
-source.output("valid")                              // "source.output.valid"
-source.output("validation_data.order.customer_id")  // "source.output.validation_data.order.customer_id"
-source.input("order")                               // "source.input.order"
-source.id                                           // "source.id"
-source.name                                         // "source.name"
-source.type                                         // "source.type"
-source.metadata.name                                // "source.metadata.name"
-source.metadata.version                             // "source.metadata.version"
+// Default: executor is { name: "http.get", version: "latest", registry: "local" }
+Service({ name: "http.get" })
 ```
 
-#### `exec.*` — the current execution environment
-
-Available in connector expressions and service configuration templates.
+Override the executor explicitly when you need a specific one:
 
 ```ts
-exec.input("order.items")    // "execution.input.order.items"
-exec.input("order")          // "execution.input.order"
-exec.id                      // "execution.id"
-exec.correlationId           // "execution.correlation_id"
-exec.blueprint.name          // "execution.blueprint.name"
+Service({ name: "github.read" }).executor({
+  name: "http.get",
+  version: "^1.2.0",
+  registry: "official",
+})
 ```
 
-#### Comparison methods
+#### Input and output contracts
 
-Every `ExpressionBuilder` (returned by `source.*` / `exec.*`) exposes comparison helpers that build complex CEL conditions:
+You can declare typed contracts, which give you full IDE type-safety (autocomplete, type-checked binding, instant errors for wrong field names or types):
 
 ```ts
-source.output("valid").eq(true)                       // "source.output.valid == true"
-source.output("status").neq("failed")                 // "source.output.status != 'failed'"
-source.output("amount").gt(100)                       // "source.output.amount > 100"
-source.output("amount").gte(100)                      // "source.output.amount >= 100"
-source.output("amount").lt(100)                       // "source.output.amount < 100"
-source.output("amount").lte(100)                      // "source.output.amount <= 100"
+interface GitHubReadInput {
+  owner: string;
+  repository: string;
+  path: string;
+}
 
-// boolean composition
-const expr = source.output("valid").eq(true)
-  .and(source.output("status").eq("ok"));             // "(source.output.valid == true) && (source.output.status == 'ok')"
+interface GitHubReadOutput {
+  content: string;
+  path: string;
+  sha: string;
+}
+
+const githubRead = Service({
+  name: "github.read",
+  version: "1.0.0",
+})
+  .inputSchema<GitHubReadInput>()
+  .outputSchema<GitHubReadOutput>();
 ```
 
-Values are serialized: strings become `'quoted'`, numbers/booleans are literal, `null`/`undefined` become `null`.
-
-### Mapping
-
-Mappings wire data between services or from the execution context into a service's inputs.
-
-#### Connector mappings (in `.then()`)
+You can also describe contracts with runtime validation rules, which also populate the manifest:
 
 ```ts
-import { map, source, exec } from "@neuron/sdk";
+import { string, number, boolean } from "@neuron/sdk";
 
-map("customer_id", source.output("validation_data.order.customer_id"))
-// → { target: "customer_id", expression: "source.output.validation_data.order.customer_id" }
-```
-
-#### Service-level mappings
-
-```ts
-import { inputMapping, outputMapping } from "@neuron/sdk";
-
-inputMapping("execution.input.order", "order")   // → { direction: "input", source, target }
-outputMapping("result", "output")                 // → { direction: "output", source, target }
-```
-
-### Validation
-
-Two kinds of validation exist.
-
-#### Connector validations (in `.then()`)
-
-Guard a transition with a CEL condition. If the condition is false, the connector fails with the given message:
-
-```ts
-import { validate, source } from "@neuron/sdk";
-
-validate(source.output("valid").eq(true), "Order validation failed")
-// → { expression: "source.output.valid == true", message: "Order validation failed" }
-```
-
-#### Service-level input validation (`.validateInput`)
-
-JSON Schema–like rule builders:
-
-```ts
-import { required, string, number, boolean, array, object } from "@neuron/sdk";
-
-// Connector validation (CEL-based)
-validate(source.output("valid").eq(true), "Order validation failed")
-
-// Service input validation (schema-based)
-service.validateInput("email", {
-  ...string().email().min(5).toObject(),
-  ...required(),
+const createUser = Service({ name: "user.create" }).inputSchema({
+  email: string().email().required(),
+  age: number().min(18).max(120),
+}).outputSchema({
+  id: string().required(),
+  active: boolean(),
 });
 ```
 
-The schema builders:
+### Expressions
 
-| Builder | Methods |
-| --- | --- |
-| `required()` | No extra methods; `{ type: "required" }`. |
-| `string()` | `.min(n)` → `minLength`, `.max(n)` → `maxLength`, `.pattern(re)` → `pattern`, `.email()`, `.uuid()`, `.toObject()`. |
-| `number()` | `.min(n)` → `minimum`, `.max(n)` → `maximum`, `.exclusiveMin(n)`, `.exclusiveMax(n)`, `.integer()`, `.toObject()`. |
-| `boolean()` | `{ type: "boolean" }`. |
-| `array()` | `.minItems(n)`, `.maxItems(n)`, `.uniqueItems()`, `.toObject()`. |
-| `object()` | `.required(props[])`, `.additionalProperties(bool)`, `.toObject()`. |
+The SDK exposes a typed, proxy-backed expression system for referring to a service's output or input fields, and for building conditions.
 
-Each validator has `.toObject()` which returns a plain `ValidationRule` (`{ type, ... }`) you can spread into a rules object.
-
-### Composition
-
-Compose services into a **definition tree**. The two composition primitives are `.then()` (sequence) and `Parallel()`.
-
-#### Sequence (`.then`)
-
-Chain services linearly. Each `.then()` can carry connector `mappings` and `validations` for that specific transition.
+#### Referencing output fields
 
 ```ts
-const pipeline = validateOrder
-  .then(parseOrder, {
-    mappings: [map("validation_data", source.output())],
-    validations: [validate(source.output("valid").eq(true), "Order validation failed")],
+githubRead.output.content   // Expression<string>
+githubRead.output.sha       // Expression<string>
+githubRead.output.metadata.size  // Expression<number>
+```
+
+Autocomplete lists exactly the declared output fields — nothing else. Referencing an unknown field is an IDE error.
+
+```ts
+// @ts-expect-error — fileData is not a declared output
+githubRead.output.fileData
+```
+
+#### Conditions
+
+Expressions carry comparison operators that build guard conditions:
+
+```ts
+import { type Expression } from "@neuron/sdk";
+
+const ready: Expression<boolean> =
+  authorizePayment.output.paymentIntent.status.equals("requires_capture");
+
+const valid: Expression<boolean> =
+  githubRead.output.content.notEquals("");
+```
+
+Available operators: `equals`, `notEquals`, `greaterThan`, `greaterThanOrEqualTo`, `lessThan`, `lessThanOrEqualTo`, `and`, `or`.
+
+### Binding input
+
+**`withInput()`** binds a service's input fields to values or expressions. It is the primary way to feed data into a service.
+
+#### Automatic style — pass expressions of a previous service's output
+
+```ts
+analyzeContent.withInput({
+  content: githubRead.output.content,
+  path: githubRead.output.path,
+});
+```
+
+TypeScript checks every binding against the target's input schema. Wrong field names and wrong types are IDE errors:
+
+```ts
+// @ts-expect-error — sha is string but path expects a different type
+analyzeContent.withInput({ content: githubRead.output.sha });
+```
+
+#### Literal values
+
+```ts
+githubRead.withInput({
+  owner: "Muhammad-Jay",
+  repository: "neuron",
+  path: "README.md",
+});
+```
+
+### Chaining services: `.next()`
+
+**`.next()`** wires a service to the next one, producing a sequence. The original `ServiceDefinition` is used to start a chain, and the chain can continue with `.next()` on each step.
+
+```ts
+const pipeline = githubRead
+  .next(
+    analyzeContent.withInput({
+      content: githubRead.output.content,
+      path: githubRead.output.path,
+    })
+  )
+  .next(saveResult);
+```
+
+#### Guard conditions
+
+The second argument to `.next()` declares a condition that must hold before the next step runs:
+
+```ts
+authorizePayment
+  .next(
+    capturePayment.withInput({
+      paymentIntentId: authorizePayment.output.paymentIntent.id,
+    }),
+    {
+      when: authorizePayment.output.paymentIntent.status.equals("requires_capture"),
+      message: "Payment not authorized",
+    }
+  )
+```
+
+### Explicit mapping: `.connect()`
+
+When automatic field-by-field binding isn't enough (different field names, transformations, or referencing a source that isn't a direct previous step), use **`.connect()`** to define an explicit mapping from a source output to the target's input.
+
+`.connect()` is fully typed: the callback receives the source output, and the returned object is checked against the target's input schema.
+
+```ts
+const githubToAnalyzer = analyzeContent.connect<GitHubReadOutput>((source) => ({
+  content: source.output.content,
+  path: source.output.path,
+}));
+```
+
+You can then pass the connection to `.next()` or into another service's `.withInput()`.
+
+Referencing a field that doesn't exist on the source is an IDE error:
+
+```ts
+analyzeContent.connect<GitHubReadOutput>((source) => ({
+  // @ts-expect-error — source output has no fileData
+  content: source.output.fileData,
+  path: source.output.path,
+}));
+```
+
+### Execution settings
+
+**`.executionConfig()`** applies runtime execution policy to a specific invocation:
+
+```ts
+githubRead
+  .withInput({ owner: "openai", repository: "neuron", path: "README.md" })
+  .executionConfig({
+    timeout: "30s",
+    retries: 2,
   })
-  .then(enrichCustomer, {
-    mappings: [map("customer_id", source.output("validation_data.order.customer_id"))],
-  });
 ```
 
-You can chain as many steps as you like — `.then().then().then()`:
+Supported options: `mode` (`"wait" | "detach"`), `timeout`, `retries`, `concurrency`, `continueOnFail`.
 
-```ts
-const seq = a.then(b).then(c).then(d);
-```
+> Execution config is the **same shape for every service** — it describes runtime policy (timeouts, retries, concurrency), not service-specific business config.
 
-#### Parallel (`Parallel`)
+### Parallel composition
 
-Run multiple branches concurrently. The parallel node completes when all branches complete:
+**`Parallel()`** runs multiple branches concurrently. The parallel node completes when all branches complete:
 
 ```ts
 import { Parallel } from "@neuron/sdk";
 
-verify.then(
-  Parallel(
-    saveCustomer,
-    sendEmail,
-    updateAnalytics
+verify
+  .next(
+    Parallel(
+      saveCustomer.withInput({ ... }),
+      sendEmail.withInput({ ... }),
+      updateAnalytics.withInput({ ... })
+    )
   )
-).then(finish);
+  .next(finish);
 ```
-
-`Parallel` accepts service definitions or composition nodes as branches.
 
 ### System
 
-A `System` aggregates registered services and a root composition node into a manifest.
+A `System` aggregates a root composition and compiles it into a manifest. Services referenced in the tree are **auto-discovered** — there is no manual registration.
 
 ```ts
 import { System } from "@neuron/sdk";
 
-const sys = System("order-processing")
-  .version("1.0.0")
-  .description("Order processing pipeline")
-  .config({ environment: "development" })
-  .register(validateOrder)
-  .register(parseOrder)
-  // or register them all at once:
-  .registerAll(validateOrder, parseOrder, enrichCustomer)
+const system = System({
+  name: "order-processing",
+  version: "1.0.0",
+  description: "Order processing pipeline",
+});
+
+const manifest = system
+  .inputSchema<SystemInput>()
   .run(pipeline)
   .toManifest();
 ```
 
-#### System builder methods
+`toManifest()` walks the composition tree, collects every service definition, derives the connections between services, and produces the final `SystemManifest`. If a service is referenced in the tree but never defined, it throws.
 
-| Method | Description |
-| --- | --- |
-| `.version(v)` | Set system version (required before `toManifest()`). |
-| `.description(d)` | Set system description. |
-| `.config(cfg)` | Set system-level configuration. |
-| `.register(service)` | Register a service definition. |
-| `.registerAll(...services)` | Register multiple services at once. |
-| `.run(node)` | Set the root composition node (the `definition`). |
-| `.toManifest()` | Compile to a `SystemManifest`. |
+#### Typed system input with `.withParams()`
 
-#### Auto-collection
+Bind the system's execution input to the very first service in the chain:
 
-Services are **auto-discovered** from the composition tree during `toManifest()`. Explicit registration via `.register()`/`.registerAll()` is not strictly required for services present in the tree — but it is a best practice (and required if you want the system to guarantee they exist). If a service is referenced in the tree but not registered, `toManifest()` throws.
+```ts
+System({ name: "order-processing", version: "1.0.0" })
+  .inputSchema<SystemInput>()
+  .withParams((input) =>
+    validateOrder.withInput({
+      order: input.order,
+    })
+  )
+  .toManifest();
+```
 
-Connectors are **auto-extracted** from `.then()` chains, so you don't have to declare the `connectors` list manually — the SDK walks the tree and derives `from`/`to` pairs, attaching the mappings/validations you passed to each `.then()`.
-
-## The `SystemManifest`
+## The Manifest
 
 `toManifest()` produces this shape:
 
@@ -320,75 +320,61 @@ interface SystemManifest {
   apiVersion: "neuron/v1";
   kind: "System";
   metadata: { name: string; version: string; description?: string };
-  services: ServiceManifest[];    // flattened service definitions
-  connectors: ConnectorManifest[]; // flattened connectors (from → to)
-  definition: SystemNodeManifest;  // the composition tree
+  services: ServiceManifest[];
+  inputs?: PortManifest[];
+  connectors: ConnectorManifest[];
+  definition: CompositionManifest;
 }
 ```
 
-`SystemNodeManifest` is a discriminated union:
+- **`services`** — every service definition in the system (identity, executor, contracts).
+- **`connectors`** — the derived connections between services, including field mappings and guard conditions. You don't author this list directly; the SDK derives it from `.next()` / `.withInput()` / `.connect()`.
+- **`definition`** — the composition tree (`service` / `sequence` / `parallel`).
 
-```ts
-type SystemNodeManifest =
-  | { kind: "service";  service: string }
-  | { kind: "sequence"; steps: SystemNodeManifest[] }
-  | { kind: "parallel"; branches: SystemNodeManifest[] };
+## CLI
+
+The SDK ships a small CLI (`neuron-sdk`) to compile a project's entry into a manifest.
+
+```bash
+neuron-sdk build
 ```
 
-## Complete Example
+It looks for a `neuron.config.ts` (or `.js` / `.mjs`) and uses the `entry` (default `index.ts`) as the manifest source. The import must default-export the compiled manifest. The resulting JSON is written to `.neuron/manifest.json`.
 
-A full order-processing pipeline (see `examples/ecommerce_order_ts/`):
-
-```ts
-import {
-  System, Service, Parallel, map, validate, source, exec,
-} from "@neuron/sdk";
-
-const validateOrder = Service("validate-order")
-  .description("Validate incoming order request")
-  .executor("set", { status: "validated", valid: true })
-  .input({ order: exec.input("order") })
-  .execution({ mode: "wait", timeout: "5s" });
-
-const parseOrder = Service("parse-order")
-  .executor("set", { currency: "USD" })
-  .input({ validation_data: source.output() })
-  .execution({ mode: "wait", timeout: "5s" });
-
-const pipeline = validateOrder
-  .then(parseOrder, {
-    mappings: [map("validation_data", source.output())],
-    validations: [validate(source.output("valid").eq(true), "Order validation failed")],
-  });
-
-const manifest = System("order-processing")
-  .version("1.0.0")
-  .description("Order processing pipeline")
-  .registerAll(validateOrder, parseOrder)
-  .run(pipeline)
-  .toManifest();
+```bash
+neuron-sdk version   # print the SDK version
+neuron-sdk help      # show usage
 ```
 
-## Package & Exports
+### Configuration
 
-All public API is re-exported from the package root (`@neuron/sdk`):
+```ts
+// neuron.config.ts
+import { defineConfig } from "@neuron/sdk";
 
-- `System`, `SystemDefinition`
-- `Service`, `ServiceDefinition`, `Input`, `Output`, `SequenceNode`, `InputBinding`
-- `Parallel`
-- `source`, `exec`, `Expression`, `ExpressionBuilder`
-- `map`, `inputMapping`, `outputMapping`
-- `validate`, `required`, `string`, `number`, `boolean`, `array`, `object`
-- Validation types: `ValidationRule`, `StringValidator`, `NumberValidator`, `ArrayValidator`, `ObjectValidator`
-- Manifest types: `SystemManifest`, `ServiceManifest`, `ConnectorManifest`, `ConnectorMappingManifest`, `ConnectorValidationManifest`, `PortManifest`, `SystemNodeManifest`, `ServiceMappingManifest`, `ServiceValidationManifest`
+export default defineConfig({
+  entry: "./system.ts",
+});
+```
+
+## Package Exports
+
+Public API re-exported from `@neuron/sdk`:
+
+- **Factories:** `Service`, `System`, `Parallel`, `connect`, `defineConfig`
+- **Schema builders:** `string`, `number`, `boolean`, `list`, `record`
+- **Types:** `ServiceDefinition`, `SystemDefinition`, `Expression`, `Expressionify`, `ExpressionArray`, `SourceContext`, `ExecutionContext`, `Connection`, `ExecutionConfig`, `InputBindings`, `InputValue`, `Composition`
+- **Schema types:** `Schema`, `SchemaField`, `Infer`, `InferSchema`, `SchemaObject`, `StringField`, `NumberField`, `BooleanField`, `ListField`, `RecordField`, `FieldRules`
+- **Manifest types:** `SystemManifest`, `ServiceManifest`, `ConnectorManifest`, `ConnectorMappingManifest`, `ConnectorValidationManifest`, `PortManifest`, `SystemNodeManifest`
+- **Config types:** `NeuronConfig`
 
 ## Development
 
 ```bash
 pnpm install          # link workspace
 pnpm build:sdk        # build to dist/ via tsup
-pnpm test:sdk         # run vitest (90 tests)
+pnpm test:sdk         # run vitest
 pnpm typecheck:sdk    # tsc --noEmit
 ```
 
-Tests live in `packages/sdk/test/` and cover expressions, services, composition, mapping, validation, and full system manifests.
+Tests live in `packages/sdk/test/` and cover services, expressions, composition, connections, schemas, and full system manifests.

@@ -14,7 +14,13 @@ function toNode(value: SystemNode): Composition {
   if (value instanceof SequenceNode) return value._composition;
   if (value instanceof ParallelCompositionHolder) return value._composition;
   if (value instanceof ServiceDefinition) {
-    return { kind: "service", serviceRef: value.ref, bindings: {}, incomingConditions: [] };
+    return {
+      kind: "service",
+      serviceRef: value.ref,
+      serviceDef: value,
+      bindings: {},
+      incomingConditions: [],
+    };
   }
   if (value && typeof value === "object" && value.kind) {
     return manifestToComposition(value as SystemNodeManifest);
@@ -41,7 +47,7 @@ function manifestToComposition(node: SystemNodeManifest): Composition {
  *
  * @example
  * ```ts
- * verify.then(
+ * verify.next(
  *   Parallel(
  *     saveCustomer,
  *     sendEmail,

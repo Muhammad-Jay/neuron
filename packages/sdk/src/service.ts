@@ -9,6 +9,10 @@ import {
 } from "./expression.js";
 import { schemaToManifest, type FieldRules, type InferSchema, type SchemaObject } from "./schema.js";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 export interface ExecutionConfig {
   mode?: "wait" | "detach";
   timeout?: string;
@@ -16,26 +20,6 @@ export interface ExecutionConfig {
   concurrency?: number;
   continueOnFail?: boolean;
 }
-
-export interface ServiceComposition {
-  kind: "service";
-  serviceRef: string;
-  bindings: Record<string, string>;
-  execution?: ExecutionConfig;
-  incomingConditions: Array<{ expression: string; message?: string }>;
-}
-
-export interface SequenceComposition {
-  kind: "sequence";
-  steps: Composition[];
-}
-
-export interface ParallelComposition {
-  kind: "parallel";
-  branches: Composition[];
-}
-
-export type Composition = ServiceComposition | SequenceComposition | ParallelComposition;
 
 export type Condition = {
   when: Expression<boolean>;
@@ -69,24 +53,63 @@ export interface ServiceReference<TInput extends object, TOutput extends object>
   readonly output: Expressionify<TOutput>;
   withInput(bindings: InputBindings<TInput>): CompositionNode<TInput, TOutput>;
   withInput<TSource extends object>(connection: Connection<TSource, TInput>): CompositionNode<TInput, TOutput>;
-  withExecution(execution: ExecutionConfig): CompositionNode<TInput, TOutput>;
+  executionConfig(config: ExecutionConfig): CompositionNode<TInput, TOutput>;
   connect<TSource extends object>(
     define: (source: SourceContext<TSource>) => InputBindings<TInput>
   ): Connection<TSource, TInput>;
-  when(condition: Expression<boolean>, message: string): CompositionNode<TInput, TOutput>;
 }
 
+// ---------------------------------------------------------------------------
+// Internal composition types
+// ---------------------------------------------------------------------------
+
+export interface ServiceComposition {
+  kind: "service";
+  serviceRef: string;
+  serviceDef?: ServiceDefinition<object, object>;
+  bindings: Record<string, string>;
+  execution?: ExecutionConfig;
+  incomingConditions: Array<{ expression: string; message?: string }>;
+}
+
+export interface SequenceComposition {
+  kind: "sequence";
+  steps: Composition[];
+}
+
+export interface ParallelComposition {
+  kind: "parallel";
+  branches: Composition[];
+}
+
+export type Composition = ServiceComposition | SequenceComposition | ParallelComposition;
+
+// ---------------------------------------------------------------------------
+// Executor config
+// ---------------------------------------------------------------------------
+
+interface ExecutorConfig {
+  name: string;
+  version: string;
+  registry: string;
+}
+
+// ---------------------------------------------------------------------------
+// Service state
+// ---------------------------------------------------------------------------
+
 type ServiceState = {
-  executorType: string;
-  executorVersion?: string;
-  executorSource?: string;
-  executorConfig?: Record<string, unknown>;
+  executor: ExecutorConfig;
   version?: string;
   description?: string;
   inputPorts: PortManifest[];
   outputPorts: PortManifest[];
   inputRules: Record<string, FieldRules>;
 };
+
+// ---------------------------------------------------------------------------
+// CompositionNode — a service with bindings (composition step)
+// ---------------------------------------------------------------------------
 
 export class CompositionNode<TInput extends object = object, TOutput extends object = object> {
   readonly __inputMarker?: TInput;
@@ -97,6 +120,7 @@ export class CompositionNode<TInput extends object = object, TOutput extends obj
     this._composition = {
       kind: "service",
       serviceRef,
+      serviceDef: compositionOverride?.serviceDef,
       bindings: compositionOverride?.bindings ?? {},
       execution: compositionOverride?.execution,
       incomingConditions: compositionOverride?.incomingConditions ?? [],
@@ -119,34 +143,27 @@ export class CompositionNode<TInput extends object = object, TOutput extends obj
     return createExpressionProxy<TOutput>("source.output");
   }
 
-  then<TNextInput extends object, TNextOutput extends object>(
+  next<TNextInput extends object, TNextOutput extends object>(
     next:
       | ServiceDefinition<TNextInput, TNextOutput>
       | ServiceReference<TNextInput, TNextOutput>
       | CompositionNode<TNextInput, TNextOutput>
-      | SequenceNode<TNextOutput>
       | ParallelCompositionHolder
       | Connection<TOutput, TNextInput>,
     condition?: Condition
   ): SequenceNode<TNextOutput> {
-    return new SequenceNode(this._composition, toComposition(next, condition)) as SequenceNode<TNextOutput>;
-  }
-
-  when(condition: Expression<boolean>, message: string): CompositionNode<TInput, TOutput> {
-    return new CompositionNode<TInput, TOutput>(this.serviceRef, {
-      bindings: { ...this.bindings },
-      execution: this.executionConfig,
-      incomingConditions: [
-        ...this._composition.incomingConditions,
-        { expression: String(condition), message },
-      ],
-    });
+    const steps = [this._composition, ...splitSequence(toComposition(next, condition))];
+    return new SequenceNode<TNextOutput>({ kind: "sequence", steps });
   }
 
   node(): SystemNodeManifest {
     return toManifestNode(this._composition);
   }
 }
+
+// ---------------------------------------------------------------------------
+// SequenceNode — internal for chain building
+// ---------------------------------------------------------------------------
 
 export class SequenceNode<TOutput extends object = object> {
   readonly __outputMarker?: TOutput;
@@ -166,7 +183,7 @@ export class SequenceNode<TOutput extends object = object> {
     return createExpressionProxy<TOutput>("source.output");
   }
 
-  then<TNextInput extends object, TNextOutput extends object>(
+  next<TNextInput extends object, TNextOutput extends object>(
     next:
       | ServiceDefinition<TNextInput, TNextOutput>
       | ServiceReference<TNextInput, TNextOutput>
@@ -187,6 +204,10 @@ export class SequenceNode<TOutput extends object = object> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ParallelCompositionHolder
+// ---------------------------------------------------------------------------
+
 export class ParallelCompositionHolder {
   readonly _composition: ParallelComposition;
 
@@ -199,56 +220,37 @@ export class ParallelCompositionHolder {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ServiceDefinition — immutable service blueprint
+// ---------------------------------------------------------------------------
+
 export class ServiceDefinition<TInput extends object = object, TOutput extends object = object>
   implements ServiceReference<TInput, TOutput> {
   readonly ref: string;
-  private readonly state: ServiceState;
+  private readonly _state: ServiceState;
+  private readonly _executionConfig?: ExecutionConfig;
 
-  constructor(ref: string, state?: Partial<ServiceState>) {
+  constructor(ref: string, state?: Partial<ServiceState>, executionConfig?: ExecutionConfig) {
     this.ref = ref;
-    this.state = {
-      executorType: state?.executorType ?? ref,
-      executorVersion: state?.executorVersion,
-      executorSource: state?.executorSource,
-      executorConfig: state?.executorConfig,
+    this._state = {
+      executor: state?.executor ?? { name: ref, version: "latest", registry: "local" },
       version: state?.version,
       description: state?.description,
       inputPorts: state?.inputPorts ?? [],
       outputPorts: state?.outputPorts ?? [],
       inputRules: state?.inputRules ?? {},
     };
+    this._executionConfig = executionConfig;
   }
 
-  executor(type: string | { type: string; version?: string; source?: string; config?: Record<string, unknown> }, config?: Record<string, unknown>, version?: string): this {
-    if (typeof type === "string") {
-      return this.clone({
-        executorType: type,
-        executorConfig: config,
-        executorVersion: version ?? this.state.executorVersion,
-      }) as this;
-    }
+  executor(config: { name: string; version?: string; registry?: string }): this {
     return this.clone({
-      executorType: type.type,
-      executorVersion: type.version,
-      executorSource: type.source,
-      executorConfig: type.config,
+      executor: {
+        name: config.name,
+        version: config.version ?? "latest",
+        registry: config.registry ?? "local",
+      },
     }) as this;
-  }
-
-  executorVersion(version: string): this {
-    return this.clone({ executorVersion: version }) as this;
-  }
-
-  executorSource(source: string): this {
-    return this.clone({ executorSource: source }) as this;
-  }
-
-  version(version: string): this {
-    return this.clone({ version }) as this;
-  }
-
-  description(description: string): this {
-    return this.clone({ description }) as this;
   }
 
   inputSchema<T extends object>(): ServiceDefinition<T, TOutput>;
@@ -280,20 +282,25 @@ export class ServiceDefinition<TInput extends object = object, TOutput extends o
   withInput(bindingsOrConnection: InputBindings<TInput> | Connection<object, TInput>): CompositionNode<TInput, TOutput> {
     if (isConnection(bindingsOrConnection)) {
       return new CompositionNode<TInput, TOutput>(this.ref, {
+        serviceDef: this as unknown as ServiceDefinition<object, object>,
         bindings: bindingsFromConnection(bindingsOrConnection),
-        incomingConditions: bindingsOrConnection.__conditions.map((condition) => ({
-          expression: condition.expression,
-          message: condition.message,
+        incomingConditions: bindingsOrConnection.__conditions.map((c) => ({
+          expression: c.expression,
+          message: c.message,
         })),
       });
     }
     return new CompositionNode<TInput, TOutput>(this.ref, {
+      serviceDef: this as unknown as ServiceDefinition<object, object>,
       bindings: bindingsFromObject(bindingsOrConnection),
     });
   }
 
-  withExecution(execution: ExecutionConfig): CompositionNode<TInput, TOutput> {
-    return new CompositionNode<TInput, TOutput>(this.ref, { execution });
+  executionConfig(config: ExecutionConfig): CompositionNode<TInput, TOutput> {
+    return new CompositionNode<TInput, TOutput>(this.ref, {
+      serviceDef: this as unknown as ServiceDefinition<object, object>,
+      execution: config,
+    });
   }
 
   connect<TSource extends object>(
@@ -302,8 +309,26 @@ export class ServiceDefinition<TInput extends object = object, TOutput extends o
     return makeConnection(this.ref, define(createSourceContext<TSource>()));
   }
 
-  when(condition: Expression<boolean>, message: string): CompositionNode<TInput, TOutput> {
-    return this.withInput({} as InputBindings<TInput>).when(condition, message);
+  next<TNextInput extends object, TNextOutput extends object>(
+    next:
+      | ServiceDefinition<TNextInput, TNextOutput>
+      | ServiceReference<TNextInput, TNextOutput>
+      | CompositionNode<TNextInput, TNextOutput>
+      | SequenceNode<TNextOutput>
+      | ParallelCompositionHolder
+      | Connection<TOutput, TNextInput>,
+    condition?: Condition
+  ): SequenceNode<TNextOutput> {
+    const sourceComp: ServiceComposition = {
+      kind: "service",
+      serviceRef: this.ref,
+      serviceDef: this as unknown as ServiceDefinition<object, object>,
+      bindings: {},
+      incomingConditions: [],
+    };
+    const targetComp = toComposition(next, condition);
+    const steps = [sourceComp, ...splitSequence(targetComp)];
+    return new SequenceNode<TNextOutput>({ kind: "sequence", steps });
   }
 
   node(): SystemNodeManifest {
@@ -313,20 +338,16 @@ export class ServiceDefinition<TInput extends object = object, TOutput extends o
   toManifest(): ServiceManifest {
     return {
       name: this.ref,
-      version: this.state.version,
-      description: this.state.description,
+      version: this._state.version,
+      description: this._state.description,
       executor: {
-        type: this.state.executorType,
-        version: this.state.executorVersion,
-        source: this.state.executorSource,
-        config: this.state.executorConfig,
+        name: this._state.executor.name,
+        version: this._state.executor.version,
+        registry: this._state.executor.registry,
       },
-      inputs: this.state.inputPorts,
-      outputs: this.state.outputPorts,
-      mappings: [],
-      validations: Object.entries(this.state.inputRules).map(([field, rules]) => ({ field, rules })),
-      config: {},
-      execution: {},
+      inputs: this._state.inputPorts,
+      outputs: this._state.outputPorts,
+      execution: this._executionConfig,
     };
   }
 
@@ -338,20 +359,33 @@ export class ServiceDefinition<TInput extends object = object, TOutput extends o
     patch: Partial<ServiceState> = {}
   ): ServiceDefinition<TNextInput, TNextOutput> {
     return new ServiceDefinition<TNextInput, TNextOutput>(this.ref, {
-      ...this.state,
-      inputPorts: [...this.state.inputPorts],
-      outputPorts: [...this.state.outputPorts],
-      inputRules: { ...this.state.inputRules },
+      ...this._state,
+      executor: { ...this._state.executor },
+      inputPorts: [...this._state.inputPorts],
+      outputPorts: [...this._state.outputPorts],
+      inputRules: { ...this._state.inputRules },
       ...patch,
     });
   }
 }
 
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
 export function Service<TInput extends object = object, TOutput extends object = object>(
-  ref: string
+  config: { name: string; version?: string; description?: string }
 ): ServiceDefinition<TInput, TOutput> {
-  return new ServiceDefinition<TInput, TOutput>(ref);
+  return new ServiceDefinition<TInput, TOutput>(config.name, {
+    version: config.version,
+    description: config.description,
+    executor: { name: config.name, version: config.version ?? "latest", registry: "local" },
+  });
 }
+
+// ---------------------------------------------------------------------------
+// Manifest helpers
+// ---------------------------------------------------------------------------
 
 export function toManifestNode(comp: Composition): SystemNodeManifest {
   switch (comp.kind) {
@@ -363,6 +397,10 @@ export function toManifestNode(comp: Composition): SystemNodeManifest {
       return { kind: "parallel", branches: comp.branches.map(toManifestNode) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Connection
+// ---------------------------------------------------------------------------
 
 export function makeConnection<TSource extends object, TTarget extends object>(
   serviceRef: string | undefined,
@@ -385,6 +423,10 @@ export function makeConnection<TSource extends object, TTarget extends object>(
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
 function toComposition(
   value:
@@ -420,32 +462,39 @@ function toComposition(
       kind: "service",
       serviceRef: value.__serviceRef ?? "",
       bindings: bindingsFromConnection(value),
-      incomingConditions: value.__conditions.map((condition) => ({
-        expression: condition.expression,
-        message: condition.message,
+      incomingConditions: value.__conditions.map((c) => ({
+        expression: c.expression,
+        message: c.message,
       })),
     };
   }
   if (isServiceReference(value)) {
-    return withCondition({
-      kind: "service",
-      serviceRef: value.ref,
-      bindings: {},
-      incomingConditions: [],
-    }, condition);
+    return withCondition(
+      {
+        kind: "service",
+        serviceRef: value.ref,
+        serviceDef: value instanceof ServiceDefinition ? (value as unknown as ServiceDefinition<object, object>) : undefined,
+        bindings: {},
+        incomingConditions: [],
+      },
+      condition
+    );
   }
-  throw new Error("Invalid node provided to a `.then()` chain");
+  throw new Error("Invalid node provided to a `.next()` chain");
 }
 
 function withCondition(comp: ServiceComposition, condition?: Condition): ServiceComposition {
   return {
     kind: "service",
     serviceRef: comp.serviceRef,
+    serviceDef: comp.serviceDef,
     bindings: { ...comp.bindings },
     execution: comp.execution,
     incomingConditions: [
       ...comp.incomingConditions,
-      ...(condition ? [{ expression: String(condition.when), message: condition.message }] : []),
+      ...(condition
+        ? [{ expression: String(condition.when), message: condition.message }]
+        : []),
     ],
   };
 }
@@ -459,7 +508,7 @@ function bindingsFromObject<T extends object>(bindings: InputBindings<T>): Recor
 }
 
 function bindingsFromConnection(connection: Connection<object, object>): Record<string, string> {
-  return Object.fromEntries(connection.__bindings.map((binding) => [binding.target, binding.expression]));
+  return Object.fromEntries(connection.__bindings.map((b) => [b.target, b.expression]));
 }
 
 function splitSequence(comp: Composition): Composition[] {
@@ -471,9 +520,10 @@ function cloneComposition(comp: Composition): Composition {
     return {
       kind: "service",
       serviceRef: comp.serviceRef,
+      serviceDef: comp.serviceDef,
       bindings: { ...comp.bindings },
       execution: comp.execution,
-      incomingConditions: comp.incomingConditions.map((condition) => ({ ...condition })),
+      incomingConditions: comp.incomingConditions.map((c) => ({ ...c })),
     };
   }
   if (comp.kind === "sequence") {
@@ -498,5 +548,5 @@ function isConnection(value: unknown): value is Connection<object, object> {
 }
 
 function isServiceReference(value: unknown): value is ServiceReference<object, object> {
-  return Boolean(value && typeof value === "object" && "ref" in value && "withInput" in value);
+  return Boolean(value && typeof value === "object" && "ref" in value && "output" in value);
 }

@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["index.ts"]
+  "include": ["index.ts", "system.ts", "pipeline.ts", "types.ts", "services/**/*.ts", "neuron.config.ts"]
 }

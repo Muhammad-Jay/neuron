@@ -20,6 +20,8 @@ coverage.txt
 # Common build output directories
 bin/
 dist/
+.neuron/
+**/.neuron/
 
 # Node.js
 node_modules/

@@ -8,29 +8,28 @@ import { createExecutionContext, createSourceContext } from "../src/expression.j
 
 describe("System", () => {
   it("throws when missing version", () => {
-    const sys = System("test").run({ kind: "service", service: "a" });
+    const sys = System({ name: "test" }).run({ kind: "service", service: "a" });
     expect(() => sys.toManifest()).toThrow('System "test" is missing a version');
   });
 
   it("throws when missing definition", () => {
-    const sys = System("test").version("1.0.0");
+    const sys = System({ name: "test", version: "1.0.0" });
     expect(() => sys.toManifest()).toThrow('System "test" has no definition');
   });
 
-  it("throws when service is not registered", () => {
-    const a = Service("a");
-    const sys = System("test")
-      .version("1.0.0")
-      .run(a.withInput({}));
-    expect(() => sys.toManifest()).toThrow('Service "a" is referenced but not registered');
+  it("throws when service is referenced but not defined", () => {
+    const sys = System({ name: "test", version: "1.0.0" }).run({
+      kind: "service",
+      serviceRef: "a",
+      bindings: {},
+      incomingConditions: [],
+    } as any);
+    expect(() => sys.toManifest()).toThrow('Service "a" is referenced in the system definition but not defined');
   });
 
-  it("produces a basic manifest with one service", () => {
-    const a = Service("a");
-    const sys = System("test")
-      .version("1.0.0")
-      .register(a)
-      .run(a.withInput({}));
+  it("produces a basic manifest with one service (no registration needed)", () => {
+    const a = Service({ name: "a" });
+    const sys = System({ name: "test", version: "1.0.0" }).run(a.withInput({}));
 
     const manifest = sys.toManifest();
     expect(manifest.apiVersion).toBe("neuron/v1");
@@ -43,13 +42,12 @@ describe("System", () => {
   });
 
   it("produces a manifest with a sequence and empty connector (auto-passthrough)", () => {
-    const a = Service("a");
-    const b = Service("b");
+    const a = Service({ name: "a" });
+    const b = Service({ name: "b" });
 
-    const sys = System("test")
-      .version("1.0.0")
-      .registerAll(a, b)
-      .run(a.withInput({}).then(b.withInput({})));
+    const sys = System({ name: "test", version: "1.0.0" }).run(
+      a.next(b.withInput({}))
+    );
 
     const manifest = sys.toManifest();
     expect(manifest.services).toHaveLength(2);
@@ -63,21 +61,18 @@ describe("System", () => {
   });
 
   it("auto-passthrough maps matching runtime schema fields", () => {
-    const a = Service("a").outputSchema({
+    const a = Service({ name: "a" }).outputSchema({
       content: string(),
       path: string(),
       ignored: number(),
     });
-    const b = Service("b").inputSchema({
+    const b = Service({ name: "b" }).inputSchema({
       content: string().required(),
       path: string().required(),
       count: number(),
     });
 
-    const sys = System("test")
-      .version("1.0.0")
-      .registerAll(a, b)
-      .run(a.withInput({}).then(b));
+    const sys = System({ name: "test", version: "1.0.0" }).run(a.next(b));
 
     expect(sys.toManifest().connectors[0].mappings).toEqual([
       { target: "content", expression: "source.output.content" },
@@ -86,19 +81,16 @@ describe("System", () => {
   });
 
   it("produces a manifest with mappings from withInput bindings", () => {
-    const a = Service("a").outputSchema({ data: string(), valid: boolean() });
-    const b = Service("b").inputSchema({ data: string().required() });
+    const a = Service({ name: "a" }).outputSchema({ data: string(), valid: boolean() });
+    const b = Service({ name: "b" }).inputSchema({ data: string().required() });
 
-    const sys = System("test")
-      .version("1.0.0")
-      .registerAll(a, b)
-      .run(
-        a.withInput({}).then(
-          b.withInput({
-            data: a.output.data,
-          })
-        )
-      );
+    const sys = System({ name: "test", version: "1.0.0" }).run(
+      a.next(
+        b.withInput({
+          data: a.output.data,
+        })
+      )
+    );
 
     const manifest = sys.toManifest();
     expect(manifest.connectors[0].mappings).toEqual([
@@ -106,19 +98,16 @@ describe("System", () => {
     ]);
   });
 
-  it("produces validations from then() conditions", () => {
-    const a = Service("a").outputSchema({ valid: boolean() });
-    const b = Service("b");
+  it("produces validations from next() conditions", () => {
+    const a = Service({ name: "a" }).outputSchema({ valid: boolean() });
+    const b = Service({ name: "b" });
 
-    const sys = System("test")
-      .version("1.0.0")
-      .registerAll(a, b)
-      .run(
-        a.withInput({}).then(b.withInput({}), {
-          when: a.output.valid.equals(true),
-          message: "Failed",
-        })
-      );
+    const sys = System({ name: "test", version: "1.0.0" }).run(
+      a.next(b.withInput({}), {
+        when: a.output.valid.equals(true),
+        message: "Failed",
+      })
+    );
 
     const manifest = sys.toManifest();
     expect(manifest.connectors[0].validations).toEqual([
@@ -127,21 +116,18 @@ describe("System", () => {
   });
 
   it("produces connectors for parallel branches", () => {
-    const a = Service("a").outputSchema({ email: string() });
-    const b = Service("b");
-    const c = Service("c");
+    const a = Service({ name: "a" }).outputSchema({ email: string() });
+    const b = Service({ name: "b" });
+    const c = Service({ name: "c" });
 
-    const sys = System("test")
-      .version("1.0.0")
-      .registerAll(a, b, c)
-      .run(
-        a.withInput({}).then(
-          Parallel(
-            b.withInput({ email: a.output.email }),
-            c.withInput({ email: a.output.email })
-          )
+    const sys = System({ name: "test", version: "1.0.0" }).run(
+      a.next(
+        Parallel(
+          b.withInput({ email: a.output.email }),
+          c.withInput({ email: a.output.email })
         )
-      );
+      )
+    );
 
     const manifest = sys.toManifest();
     expect(manifest.connectors).toHaveLength(2);
@@ -163,36 +149,30 @@ describe("System", () => {
   });
 
   it("deduplicates services referenced multiple times", () => {
-    const a = Service("a");
-    const b = Service("b");
+    const a = Service({ name: "a" });
+    const b = Service({ name: "b" });
 
-    const sys = System("test")
-      .version("1.0.0")
-      .registerAll(a, b)
-      .run(a.withInput({}).then(b.withInput({})).then(a.withInput({})));
+    const sys = System({ name: "test", version: "1.0.0" }).run(
+      a.next(b.withInput({}))
+    );
 
     const manifest = sys.toManifest();
     expect(manifest.services).toHaveLength(2);
-    expect(manifest.connectors).toHaveLength(2);
+    expect(manifest.connectors).toHaveLength(1);
   });
 
   it("supports connect() connections with when() conditions", () => {
-    const verify = Service("verify")
+    const verify = Service({ name: "verify" })
       .outputSchema({ verified: boolean(), id: string() });
-    const save = Service("save").inputSchema({ id: string().required() });
+    const save = Service({ name: "save" }).inputSchema({ id: string().required() });
 
     const source = createSourceContext<{ verified: boolean }>();
     const verifyToSave = connect<{ verified: boolean; id: string }, { id: string }>((src) => ({ id: src.output.id }))
       .when(source.output.verified.equals(true), "Not verified");
 
-    const sys = System("test")
-      .version("1.0.0")
-      .registerAll(verify, save)
-      .run(
-        verify
-          .withInput({})
-          .then(save.withInput(verifyToSave))
-      );
+    const sys = System({ name: "test", version: "1.0.0" }).run(
+      verify.next(save.withInput(verifyToSave))
+    );
 
     const manifest = sys.toManifest();
     expect(manifest.connectors[0]).toEqual({
@@ -225,23 +205,23 @@ describe("System with full ecommerce pipeline", () => {
       captureResult: { status: string };
       shipment: { trackingNumber: string; carrier: string };
     }>();
-    const validateOrder = Service("validate-order")
-      .executor("set", { status: "validated", valid: true })
+    const validateOrder = Service({ name: "validate-order" })
+      .executor({ name: "set" })
       .inputSchema({ order: record().required() })
       .outputSchema({ valid: boolean(), status: string() });
 
-    const parseOrder = Service("parse-order")
-      .executor("set", { currency: "USD" })
+    const parseOrder = Service({ name: "parse-order" })
+      .executor({ name: "set" })
       .inputSchema({ validationData: record().required() })
       .outputSchema({ currency: string(), items: record() });
 
-    const enrichCustomer = Service("enrich-customer")
-      .executor("set", { customer_data: { tier: "gold", email: "c@example.com" } })
+    const enrichCustomer = Service({ name: "enrich-customer" })
+      .executor({ name: "set" })
       .inputSchema({ customerId: string().required() })
       .outputSchema({ customerData: record() });
 
-    const calculateTotals = Service("calculate-totals")
-      .executor("set", { tax_rate: 0.0825, discount_rate: 0.1 })
+    const calculateTotals = Service({ name: "calculate-totals" })
+      .executor({ name: "set" })
       .inputSchema({
         items: record().required(),
         customerTier: string(),
@@ -250,8 +230,8 @@ describe("System with full ecommerce pipeline", () => {
       })
       .outputSchema({ total: number() });
 
-    const authorizePayment = Service("authorize-payment")
-      .executor("set", { payment_intent: { id: "pi_abc123", status: "requires_capture" } })
+    const authorizePayment = Service({ name: "authorize-payment" })
+      .executor({ name: "set" })
       .inputSchema({
         amountCents: number().required(),
         currency: string().required(),
@@ -259,21 +239,21 @@ describe("System with full ecommerce pipeline", () => {
       })
       .outputSchema({ paymentIntent: record() });
 
-    const capturePayment = Service("capture-payment")
-      .executor("set", { capture_result: { status: "succeeded" } })
+    const capturePayment = Service({ name: "capture-payment" })
+      .executor({ name: "set" })
       .inputSchema({ paymentIntentId: string().required() })
       .outputSchema({ captureResult: record() });
 
-    const createShipment = Service("create-shipment")
-      .executor("set", { shipment: { tracking_number: "1Z999" } })
+    const createShipment = Service({ name: "create-shipment" })
+      .executor({ name: "set" })
       .inputSchema({
         order: record().required(),
         email: string().email(),
       })
       .outputSchema({ shipment: record() });
 
-    const sendConfirmation = Service("send-confirmation")
-      .executor("set", { confirmation_sent: true })
+    const sendConfirmation = Service({ name: "send-confirmation" })
+      .executor({ name: "set" })
       .inputSchema({
         trackingNumber: string(),
         carrier: string(),
@@ -282,51 +262,45 @@ describe("System with full ecommerce pipeline", () => {
       })
       .outputSchema({ confirmationSent: boolean() });
 
-    const sys = System("order-processing")
-      .version("1.0.0")
-      .registerAll(
-        validateOrder, parseOrder, enrichCustomer, calculateTotals,
-        authorizePayment, capturePayment, createShipment, sendConfirmation
-      )
-      .run(
-        validateOrder
-          .withInput({ order: exec.input.order })
-          .then(parseOrder.withInput({ validationData: source.output.status }), {
-            when: source.output.valid.equals(true),
-            message: "Order validation failed",
-          })
-          .then(enrichCustomer.withInput({ customerId: source.output.currency }))
-          .then(calculateTotals.withInput({
-            items: exec.input.order.items,
-            customerTier: source.output.customerData.tier,
-            shippingState: source.output.customerData.state,
-            email: source.output.customerData.email,
-          }))
-          .then(authorizePayment.withInput({
-            amountCents: exec.input.order.total,
-            currency: exec.input.order.currency,
-            email: source.output.customerData.email,
-          }))
-          .then(capturePayment.withInput({
-            paymentIntentId: source.output.paymentIntent.id,
-          }), {
-            when: source.output.paymentIntent.status.equals("requires_capture"),
-            message: "Payment not authorized",
-          })
-          .then(createShipment.withInput({
-            order: exec.input.order,
-            email: exec.input.order.customerEmail,
-          }), {
-            when: source.output.captureResult.status.equals("succeeded"),
-            message: "Payment capture failed",
-          })
-          .then(sendConfirmation.withInput({
-            trackingNumber: source.output.shipment.trackingNumber,
-            carrier: source.output.shipment.carrier,
-            email: source.output.customerData.email,
-            grandTotal: exec.input.order.total,
-          }))
-      );
+    const sys = System({ name: "order-processing", version: "1.0.0" }).run(
+      validateOrder
+        .withInput({ order: exec.input.order })
+        .next(parseOrder.withInput({ validationData: source.output.status }), {
+          when: source.output.valid.equals(true),
+          message: "Order validation failed",
+        })
+        .next(enrichCustomer.withInput({ customerId: source.output.currency }))
+        .next(calculateTotals.withInput({
+          items: exec.input.order.items,
+          customerTier: source.output.customerData.tier,
+          shippingState: source.output.customerData.state,
+          email: source.output.customerData.email,
+        }))
+        .next(authorizePayment.withInput({
+          amountCents: exec.input.order.total,
+          currency: exec.input.order.currency,
+          email: source.output.customerData.email,
+        }))
+        .next(capturePayment.withInput({
+          paymentIntentId: source.output.paymentIntent.id,
+        }), {
+          when: source.output.paymentIntent.status.equals("requires_capture"),
+          message: "Payment not authorized",
+        })
+        .next(createShipment.withInput({
+          order: exec.input.order,
+          email: exec.input.order.customerEmail,
+        }), {
+          when: source.output.captureResult.status.equals("succeeded"),
+          message: "Payment capture failed",
+        })
+        .next(sendConfirmation.withInput({
+          trackingNumber: source.output.shipment.trackingNumber,
+          carrier: source.output.shipment.carrier,
+          email: source.output.customerData.email,
+          grandTotal: exec.input.order.total,
+        }))
+    );
 
     const manifest = sys.toManifest();
 

@@ -19,7 +19,7 @@ describe("typed expression proxies", () => {
   });
 
   it("service.output produces source.output.field", () => {
-    const svc = Service("github.read").outputSchema({
+    const svc = Service({ name: "github.read" }).outputSchema({
       content: string(),
       sha: string(),
     });

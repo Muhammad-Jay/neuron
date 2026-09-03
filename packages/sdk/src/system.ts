@@ -15,35 +15,20 @@ import { schemaToManifest, type InferSchema, type SchemaObject } from "./schema.
 type Runnable = Composition | { node(): Composition } | { _composition: Composition };
 
 export class SystemDefinition<TInput extends object = object> {
-  private _version?: string;
-  private _description?: string;
   private _root?: Composition;
-  private _services = new Map<string, ServiceDefinition<object, object>>();
   private _inputPorts: ReturnType<typeof schemaToManifest>["ports"] = [];
 
-  constructor(readonly name: string) {}
+  constructor(
+    readonly name: string,
+    readonly version?: string,
+    readonly description?: string
+  ) {}
 
-  /** Set the system version. */
-  version(version: string): this {
-    this._version = version;
-    return this;
-  }
-
-  /** Set the system description. */
-  description(description: string): this {
-    this._description = description;
-    return this;
-  }
-
-  /** Set the root composition node. */
   inputSchema<T extends object>(): SystemDefinition<T>;
   inputSchema<S extends SchemaObject>(schema: S): SystemDefinition<InferSchema<S>>;
   inputSchema(schema?: SchemaObject): SystemDefinition<object> {
-    const next = new SystemDefinition<object>(this.name);
-    next._version = this._version;
-    next._description = this._description;
+    const next = new SystemDefinition<object>(this.name, this.version, this.description);
     next._root = this._root;
-    next._services = new Map(this._services);
     if (schema) {
       next._inputPorts = schemaToManifest(schema).ports;
     } else {
@@ -71,68 +56,53 @@ export class SystemDefinition<TInput extends object = object> {
     return this;
   }
 
-  /**
-   * Register a service definition with this system.
-   */
-  register(service: ServiceDefinition<object, object>): this {
-    this._services.set(service.ref, service);
-    return this;
-  }
-
-  /**
-   * Register multiple service definitions.
-   */
-  registerAll(...services: Array<ServiceDefinition<object, object>>): this {
-    for (const svc of services) {
-      this._services.set(svc.ref, svc);
-    }
-    return this;
-  }
-
-  /**
-   * Compile the system into a manifest.
-   *
-   * Traverses the composition tree, collects all referenced services,
-   * extracts connectors from `.then()` chains, and produces a complete
-   * `SystemManifest` (neuron/v1).
-   */
   toManifest(): SystemManifest {
-    if (!this._version) {
+    if (!this.version) {
       throw new Error(`System "${this.name}" is missing a version`);
     }
     if (!this._root) {
       throw new Error(`System "${this.name}" has no definition`);
     }
 
-    const refs = collectServiceRefs(this._root);
-    const services = [];
-    for (const ref of refs) {
-      const def = this._services.get(ref);
-      if (!def) {
-        throw new Error(
-          `Service "${ref}" is referenced but not registered. Call .register() or .registerAll() on the system.`
-        );
-      }
+    const serviceDefs = new Map<string, ServiceDefinition<object, object>>();
+    collectServiceDefs(this._root, serviceDefs);
+
+    collectMissingRefs(this._root, serviceDefs);
+
+    const services: SystemManifest["services"] = [];
+    for (const [ref, def] of serviceDefs) {
       services.push(def.toManifest());
     }
 
-    const connectors = collectConnectors(this._root, this._services);
+    const connectors = collectConnectors(this._root, serviceDefs);
 
     return {
       apiVersion: "neuron/v1",
       kind: "System",
       metadata: {
         name: this.name,
-        version: this._version,
-        description: this._description,
+        version: this.version,
+        description: this.description,
       },
       inputs: this._inputPorts,
       services,
       connectors,
       definition: toManifestNode(this._root),
-    } as SystemManifest;
+    };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
+
+export function System(config: { name: string; version?: string; description?: string }): SystemDefinition {
+  return new SystemDefinition(config.name, config.version, config.description);
+}
+
+// ---------------------------------------------------------------------------
+// Manifest node conversion
+// ---------------------------------------------------------------------------
 
 function toManifestNode(comp: Composition): SystemManifest["definition"] {
   switch (comp.kind) {
@@ -145,59 +115,62 @@ function toManifestNode(comp: Composition): SystemManifest["definition"] {
   }
 }
 
-/**
- * Create a system definition.
- *
- * @example
- * ```ts
- * export default System("order-processing")
- *   .version("1.0.0")
- *   .run(validateOrder.then(parseOrder, {
- *     when: validateOrder.output.valid.equals(true),
- *     message: "Validation failed",
- *   }))
- *   .toManifest();
- * ```
- */
-export function System(name: string): SystemDefinition {
-  return new SystemDefinition(name);
-}
-
 // ---------------------------------------------------------------------------
-// Tree traversal helpers
+// Tree traversal — collect ServiceDefinition instances
 // ---------------------------------------------------------------------------
 
-function collectServiceRefs(node: Composition): string[] {
-  const refs: string[] = [];
-  const seen = new Set<string>();
-  walkServices(node, seen, refs);
-  return refs;
-}
-
-function walkServices(
+function collectServiceDefs(
   node: Composition,
-  seen: Set<string>,
-  out: string[]
+  out: Map<string, ServiceDefinition<object, object>>
 ): void {
   switch (node.kind) {
     case "service":
-      if (!seen.has(node.serviceRef)) {
-        seen.add(node.serviceRef);
-        out.push(node.serviceRef);
+      if (node.serviceDef && !out.has(node.serviceRef)) {
+        out.set(node.serviceRef, node.serviceDef);
       }
       break;
     case "sequence":
       for (const step of node.steps) {
-        walkServices(step, seen, out);
+        collectServiceDefs(step, out);
       }
       break;
     case "parallel":
       for (const branch of node.branches) {
-        walkServices(branch, seen, out);
+        collectServiceDefs(branch, out);
       }
       break;
   }
 }
+
+function collectMissingRefs(
+  node: Composition,
+  serviceDefs: Map<string, ServiceDefinition<object, object>>
+): void {
+  switch (node.kind) {
+    case "service":
+      if (!serviceDefs.has(node.serviceRef)) {
+        throw new Error(
+          `Service "${node.serviceRef}" is referenced in the system definition but not defined. ` +
+          `Ensure the service was created with Service({ name: "${node.serviceRef}", ... }) and used via .withInput(), .connect(), or .next().`
+        );
+      }
+      break;
+    case "sequence":
+      for (const step of node.steps) {
+        collectMissingRefs(step, serviceDefs);
+      }
+      break;
+    case "parallel":
+      for (const branch of node.branches) {
+        collectMissingRefs(branch, serviceDefs);
+      }
+      break;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Connector generation from composition tree
+// ---------------------------------------------------------------------------
 
 function collectConnectors(
   node: Composition,
@@ -223,7 +196,6 @@ function walkConnectors(
         const fromRefs = getServiceRefsFlat(current);
         const nextServiceTargets = getTargetServiceComps(next);
 
-        // Each predecessor service connects to each target service of the next step.
         for (const from of fromRefs) {
           for (const target of nextServiceTargets) {
             const mappings = connectorMappings(from, target, services);
@@ -241,7 +213,6 @@ function walkConnectors(
         }
       }
 
-      // Recurse into nested steps (parallel branches etc.)
       for (const step of seq.steps) {
         walkNested(step, out, services);
       }
@@ -249,7 +220,6 @@ function walkConnectors(
     }
     case "parallel": {
       const par = node as ParallelComposition;
-      // Connectors are defined by sequences; a standalone parallel has none.
       for (const branch of par.branches) {
         walkNested(branch, out, services);
       }
@@ -304,11 +274,12 @@ function compatiblePortTypes(from: string, to: string): boolean {
   return from === to || from === "any" || to === "any";
 }
 
-/**
- * The set of service compositions that are direct targets of the NEXT step.
- * For a service leaf → itself. For a sequence → its first step's targets.
- * For a parallel → all branch entry targets.
- */
+interface ServiceTarget {
+  serviceRef: string;
+  bindings: Record<string, string>;
+  incomingConditions: Array<{ expression: string; message?: string }>;
+}
+
 function getTargetServiceComps(node: Composition): ServiceTarget[] {
   if (node.kind === "service") {
     return [node];
@@ -326,12 +297,6 @@ function getTargetServiceComps(node: Composition): ServiceTarget[] {
     return targets;
   }
   return [];
-}
-
-interface ServiceTarget {
-  serviceRef: string;
-  bindings: Record<string, string>;
-  incomingConditions: Array<{ expression: string; message?: string }>;
 }
 
 function getServiceRefsFlat(node: Composition): string[] {

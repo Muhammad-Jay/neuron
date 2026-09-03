@@ -53,8 +53,8 @@ describe("connect()", () => {
   });
 
   it("works with a service's .withInput()", () => {
-    const verify = Service("verify").outputSchema({ id: string() });
-    const save = Service("save").inputSchema({ id: string().required() });
+    const verify = Service({ name: "verify" }).outputSchema({ id: string() });
+    const save = Service({ name: "save" }).inputSchema({ id: string().required() });
 
     const conn = connect((src) => ({ id: src.output.id }));
     const node = save.withInput(conn);

@@ -1,40 +1,35 @@
-import { mkdir, writeFile } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path"
-import {discoverProject} from "./project";
-import {loadConfig} from "./config";
+import { discoverProject } from "./project";
+import { loadConfig } from "./config";
 
 export async function buildCmdHandler(): Promise<void> {
-    const project = discoverProject()
-    const config = await loadConfig(project.configFile)
+  const project = discoverProject()
+  const config = await loadConfig(project.configFile)
 
-    console.log("Building...")
+  console.log("Building...")
 
-    const entryFIlePath = resolve(project.root, config.entry ?? "index.ts")
+  const entryFilePath = resolve(project.root, config.entry ?? "index.ts")
 
-    console.log("Entry: ", config.entry)
+  console.log("Entry: ", entryFilePath)
 
-    const manifest = await loadManifest(entryFIlePath);
+  const manifest = await loadManifest(entryFilePath);
 
-    await saveManifest(project.outputFile, manifest);
+  await saveManifest(project.outputFile, manifest);
+  console.log("Manifest written to:", project.outputFile);
 }
 
-async function loadManifest(filePath: string): Promise<unknown> {
-    const manifest = await import(pathToFileURL(filePath).href)
-
-    return manifest.default;
+export async function loadManifest(filePath: string): Promise<unknown> {
+  const module = await import(pathToFileURL(filePath).href)
+  return module.default;
 }
 
-async function saveManifest(outputPath: string, manifest: unknown): Promise<void> {
-    if (!outputPath) {
-        throw new Error("output path is missing.")
-    }
+export async function saveManifest(outputPath: string, manifest: unknown): Promise<void> {
+  if (!outputPath) {
+    throw new Error("output path is missing.")
+  }
 
-    mkdir(dirname(outputPath), {recursive: true}, (err) => {
-        throw new Error(err?.message)
-    })
-
-    writeFile(outputPath, JSON.stringify(manifest), "utf8", (err) => {
-        throw new Error(err?.message)
-    })
+  await mkdir(dirname(outputPath), { recursive: true })
+  await writeFile(outputPath, JSON.stringify(manifest, null, 2), "utf8")
 }

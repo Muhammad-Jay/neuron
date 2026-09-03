@@ -1,4 +1,4 @@
-import { exec } from "@neuron/sdk";
+import { type Expressionify } from "@neuron/sdk";
 import {
   validateOrder,
   parseOrder,
@@ -9,63 +9,70 @@ import {
   createShipment,
   sendConfirmation,
 } from "./services/index.js";
+import type { SystemInput } from "./types.js";
 
-// The pipeline wires services together. Each step consumes the output of the
-// previous service (via `source.output.<field>`) or the original system input
-// (via `exec.input.<field>`). The `.then()` second argument declares the guard
-// condition that must hold before the next service runs.
-
-export const pipeline = validateOrder
-  .withInput({ order: exec.input.order })
-  .then(parseOrder, {
-    when: validateOrder.output.valid.eq(true),
-    message: "Order validation failed",
-  })
-  .then(
-    enrichCustomer.withInput({
-      customerId: parseOrder.output.currency,
+/**
+ * Builds the order-processing pipeline from the system input.
+ *
+ * `SystemInput` (execution context) is passed in as `input`, so the original
+ * order can be bound to the very first service in the chain.
+ */
+export function buildPipeline(input: Expressionify<{ order: SystemInput["order"] }>) {
+  return validateOrder
+    .withInput({
+      order: input.order,
     })
-  )
-  .then(
-    calculateTotals.withInput({
-      items: exec.input.order.items,
-      customerTier: enrichCustomer.output.customerData.tier,
-      shippingState: enrichCustomer.output.customerData.shippingAddress.state,
-      email: enrichCustomer.output.customerData.email,
-    })
-  )
-  .then(
-    authorizePayment.withInput({
-      amountCents: exec.input.order.total,
-      currency: exec.input.order.currency,
-      email: enrichCustomer.output.customerData.email,
-    })
-  )
-  .then(
-    capturePayment.withInput({
-      paymentIntentId: authorizePayment.output.paymentIntent.id,
-    }),
-    {
-      when: authorizePayment.output.paymentIntent.status.eq("requires_capture"),
-      message: "Payment not authorized",
-    }
-  )
-  .then(
-    createShipment.withInput({
-      order: exec.input.order,
-      shippingAddress: exec.input.order.shippingAddress,
-      email: exec.input.order.customerEmail,
-    }),
-    {
-      when: capturePayment.output.captureResult.status.eq("succeeded"),
-      message: "Payment capture failed",
-    }
-  )
-  .then(
-    sendConfirmation.withInput({
-      trackingNumber: createShipment.output.shipment.trackingNumber,
-      carrier: createShipment.output.shipment.carrier,
-      email: exec.input.order.customerEmail,
-      grandTotal: exec.input.order.total,
-    })
-  );
+    .next(
+      parseOrder.withInput({
+        validationData: validateOrder.output,
+      })
+    )
+    .next(
+      enrichCustomer.withInput({
+        customerId: parseOrder.output.order.customerId,
+      })
+    )
+    .next(
+      calculateTotals.withInput({
+        items: parseOrder.output.order.items,
+        customerTier: enrichCustomer.output.customerData.tier,
+        shippingState: enrichCustomer.output.customerData.shippingAddress.state,
+        email: enrichCustomer.output.customerData.email,
+      })
+    )
+    .next(
+      authorizePayment.withInput({
+        amountCents: parseOrder.output.order.total,
+        currency: parseOrder.output.order.currency,
+        email: enrichCustomer.output.customerData.email,
+      })
+    )
+    .next(
+      capturePayment.withInput({
+        paymentIntentId: authorizePayment.output.paymentIntent.id,
+      }),
+      {
+        when: authorizePayment.output.paymentIntent.status.equals("requires_capture"),
+        message: "Payment not authorized",
+      }
+    )
+    .next(
+      createShipment.withInput({
+        order: parseOrder.output.order,
+        shippingAddress: parseOrder.output.order.shippingAddress,
+        email: enrichCustomer.output.customerData.email,
+      }),
+      {
+        when: capturePayment.output.captureResult.status.equals("succeeded"),
+        message: "Payment capture failed",
+      }
+    )
+    .next(
+      sendConfirmation.withInput({
+        trackingNumber: createShipment.output.shipment.trackingNumber,
+        carrier: createShipment.output.shipment.carrier,
+        email: enrichCustomer.output.customerData.email,
+        grandTotal: parseOrder.output.order.total,
+      })
+    );
+}

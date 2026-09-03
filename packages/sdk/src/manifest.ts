@@ -18,17 +18,13 @@ export interface ServiceManifest {
   description?: string;
 
   executor: {
-    type: string;
-    version?: string;
-    source?: string;
-    config?: Record<string, unknown>;
+    name: string;
+    version: string;
+    registry: string;
   };
 
   inputs: PortManifest[];
   outputs: PortManifest[];
-  mappings: ServiceMappingManifest[];
-  validations: ServiceValidationManifest[];
-  config: Record<string, unknown>;
 
   execution?: {
     mode?: string;
@@ -43,7 +39,6 @@ export interface PortManifest {
   name: string;
   type: "any" | "string" | "number" | "boolean" | "object" | "array";
   required: boolean;
-  /** Optional schema validation rules produced from a runtime schema builder. */
   rules?: Record<string, unknown>;
 }
 
@@ -62,17 +57,6 @@ export interface ConnectorMappingManifest {
 export interface ConnectorValidationManifest {
   expression: string;
   message: string;
-}
-
-export interface ServiceMappingManifest {
-  direction: "input" | "output";
-  source: string;
-  target: string;
-}
-
-export interface ServiceValidationManifest {
-  field: string;
-  rules: Record<string, unknown>;
 }
 
 export type SystemNodeManifest =

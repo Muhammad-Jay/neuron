@@ -1,14 +1,11 @@
-import { Service, record, string, boolean } from "@neuron/sdk";
-import {OrderInput} from "../types";
+import { Service } from "@neuron/sdk";
+import type { ValidateOrderInput, ValidateOrderOutput } from "../types";
 
-export const validateOrder = Service("validate-order")
-  .version("1.0.0")
-  .description("Validate incoming order request")
-  .executor("set", { status: "validated", valid: true })
-  .inputSchema({
-      order: record().required()
-  })
-  .outputSchema({
-    valid: boolean().required(),
-    status: string().required(),
-  });
+export const validateOrder = Service({
+  name: "validate-order",
+  version: "1.0.0",
+  description: "Validate incoming order request",
+})
+  .executor({ name: "set" })
+  .inputSchema<ValidateOrderInput>()
+  .outputSchema<ValidateOrderOutput>();

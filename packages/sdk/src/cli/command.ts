@@ -1,43 +1,57 @@
 import * as process from "node:process";
-import {buildCmdHandler} from "./build";
+import { buildCmdHandler } from "./build";
 
-async function main() {
+async function main(): Promise<void> {
     const [command] = process.argv.slice(2)
 
     switch (command) {
         case "build":
             await buildCmdHandler()
             return
+        case "version":
+        case "--version":
+        case "-v":
+            console.log(getVersion())
+            return
+        case "help":
+        case "--help":
+        case "-h":
+            printHelp()
+            return
         case undefined:
             printHelp()
-            process.exit(1);
             return
         default:
-            console.log(`Unknown command ${command}`)
+            console.error(`Unknown command: "${command}"`)
             printHelp()
             process.exit(1)
-            return
     }
 }
 
-function printHelp(){
+function getVersion(): string {
+    return "0.1.0"
+}
+
+function printHelp(): void {
     console.log(`
-    Neuron SDK
-    
-    Usage:
-      neuron-sdk build
-    
-    Commands:
-      Build: build the project
-    `)
+Neuron SDK
+
+Usage:
+  neuron-sdk <command> [options]
+
+Commands:
+  build     Compile the project into a manifest (.neuron/manifest.json)
+  version   Print the SDK version
+  help      Show this help message
+`)
 }
 
 main().catch((error) => {
-    console.log("Neuron SDK error")
+    console.error("Neuron SDK error")
 
-    if (error instanceof Error){
+    if (error instanceof Error) {
         console.error(error.message)
-    }else {
+    } else {
         console.error(error)
     }
 

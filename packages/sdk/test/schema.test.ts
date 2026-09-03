@@ -74,7 +74,7 @@ describe("Infer type utility", () => {
 
 describe("typed service with schema", () => {
   it("carries the schema in the manifest via toManifest", () => {
-    const svc = Service("user.create").inputSchema({
+    const svc = Service({ name: "user.create" }).inputSchema({
       email: string().email().required(),
     });
 

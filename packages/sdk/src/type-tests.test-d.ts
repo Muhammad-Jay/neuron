@@ -25,11 +25,11 @@ interface AnalyzeOutput {
     summary: string;
 }
 
-const githubRead = Service("github.read")
+const githubRead = Service({ name: "github.read" })
     .inputSchema<GitHubReadInput>()
     .outputSchema<GitHubReadOutput>();
 
-const analyzeContent = Service("analyze.content")
+const analyzeContent = Service({ name: "analyze.content" })
     .inputSchema<AnalyzeInput>()
     .outputSchema<AnalyzeOutput>();
 
@@ -85,7 +85,7 @@ connect<GitHubReadOutput, AnalyzeInput>((source) => ({
     path: source.output.path,
 }));
 
-const fromRuntimeSchema = Service("runtime")
+const fromRuntimeSchema = Service({ name: "runtime" })
     .inputSchema({
         requiredName: string().required(),
         optionalName: string(),
@@ -96,9 +96,8 @@ fromRuntimeSchema.withInput({ requiredName: "ok" });
 // @ts-expect-error runtime schema inference preserves required fields.
 fromRuntimeSchema.withInput({ optionalName: "ok" });
 
-System("repository-analysis")
+System({ name: "repository-analysis" })
     .inputSchema<GitHubReadInput>()
-    .registerAll(githubRead, analyzeContent)
     .withParams((input) =>
         githubRead.withInput({
             owner: input.owner,
