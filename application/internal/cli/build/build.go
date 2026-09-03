@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 
+	"github.com/Muhammad-Jay/neuron/application/compiler/manifest"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/project"
 	"github.com/spf13/cobra"
@@ -30,7 +31,6 @@ func buildCmdHandler(cmd *cobra.Command, args []string) error {
 
 	opts := project.DefaultOptions()
 	opts.Verbose = verbose
-	opts.CleanArtifact = true
 	opts.ProjectRoot = root
 
 	cmd.Println("Building project...")
@@ -38,9 +38,21 @@ func buildCmdHandler(cmd *cobra.Command, args []string) error {
 		cmd.Printf("Project root set to: %s\n", root)
 	}
 
-	_, err := project.Resolve(ctx, opts)
+	result, err := project.Resolve(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("build failed: %w", err)
+	}
+
+	// Convert the resolved YAML project into the canonical manifest and
+	// persist it to .neuron/manifest.json. This becomes the source of
+	// truth consumed by `neuron register`.
+	sys := manifest.FromResolvedProject(result.Project)
+	if err := manifest.SaveToProjectRoot(root, sys); err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+
+	if verbose {
+		cmd.Printf("Wrote manifest to %s\n", manifest.ManifestPath(root))
 	}
 
 	if isWatch {

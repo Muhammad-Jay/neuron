@@ -17,6 +17,15 @@ export async function buildCmdHandler(projectDir: string = process.cwd()): Promi
   console.log("Entry: ", entryFilePath)
 
   const manifest = await loadManifest(entryFilePath);
+  if (!manifest) {
+    throw new Error(`Entry file ${entryFilePath} returned no default manifest export`);
+  }
+
+  // Merge project-level config from neuron.config.ts into the manifest
+  // so .neuron/manifest.json is fully self-contained for later stages.
+  if (config?.config) {
+    manifest.config = {...(manifest.config ?? {}), ...config.config};
+  }
 
   await saveManifest(project.outputFile, manifest);
   console.log("Manifest written to:", project.outputFile);

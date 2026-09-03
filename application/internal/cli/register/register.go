@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Muhammad-Jay/neuron/application/compiler"
+	"github.com/Muhammad-Jay/neuron/application/compiler/manifest"
 	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
@@ -15,7 +17,8 @@ import (
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   command.Register,
-		Short: "Build, and register the current repo to N.O.R.E",
+		Short: "Register the current project to N.O.R.E",
+		Long:  "Load the built .neuron/manifest.json, compile it to a core.System, and register it with N.O.R.E. Requires `neuron build` to have been run first.",
 		RunE:  registerCmdHandler,
 	}
 
@@ -36,22 +39,34 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error {
 	}
 	defer cleanup()
 
-	p, err := resolveAndParse(ctx)
+	root, err := os.Getwd()
 	if err != nil {
-		return err
+		return fmt.Errorf("get current directory: %w", err)
 	}
 
-	sys, err := p.ParseSystem()
+	// Load the canonical manifest produced by `neuron build`.
+	m, err := manifest.LoadFromProjectRoot(root)
 	if err != nil {
-		return err
+		return fmt.Errorf("load manifest (run `neuron build` first): %w", err)
 	}
 
-	key := p.GetInstanceKey()
+	// Compile the manifest into the runtime core.System representation.
+	comp := compiler.New()
+	sys, err := comp.Compile(m)
+	if err != nil {
+		return fmt.Errorf("compile manifest: %w", err)
+	}
+
+	// Compute the instance key from the manifest + compiled system.
+	key, err := comp.InstanceKey(m)
+	if err != nil {
+		return fmt.Errorf("compute instance key: %w", err)
+	}
 
 	request := protocol.RegisterRequest{
 		Key:                     key,
 		System:                  *sys,
-		ExecutionConfigurations: p.GetExecutorRegistries(),
+		ExecutionConfigurations: compiler.BuildExecutionConfigurations(m),
 	}
 
 	result, err := c.Register(ctx, request)
@@ -59,10 +74,6 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	root, err := os.Getwd()
-	if err != nil {
-		return err
-	}
 	if err := project.SaveRegistrationKey(root, result.Key); err != nil {
 		return err
 	}

@@ -3,7 +3,7 @@ import { buildPipeline } from "./pipeline.js";
 import type { SystemInput } from "./types.js";
 
 const manifest = System({
-  name: "order-processing",
+  name: "order-processing-ts",
   version: "1.0.0",
   description: "Order processing pipeline",
 })

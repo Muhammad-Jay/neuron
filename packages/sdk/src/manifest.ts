@@ -6,6 +6,7 @@ export interface SystemManifest {
     version: string;
     description?: string;
   };
+  config?: ProjectConfig;
   services: ServiceManifest[];
   inputs?: PortManifest[];
   connectors: ConnectorManifest[];
@@ -26,6 +27,8 @@ export interface ServiceManifest {
   inputs: PortManifest[];
   outputs: PortManifest[];
 
+  config?: Record<string, unknown>;
+
   execution?: {
     mode?: string;
     timeout?: string;
@@ -33,6 +36,36 @@ export interface ServiceManifest {
     concurrency?: number;
     continueOnFail?: boolean;
   };
+}
+
+// ProjectConfig carries project-level configuration that N.O.R.E. needs
+// for runtime assembly. It is the TS-side analog of the YAML neuron.yaml
+// project fields, merged into the manifest so .neuron/manifest.json is the
+// single source of truth.
+export interface ProjectConfig {
+  executorRegistries?: Array<{
+    name?: string;
+    url: string;
+  }>;
+  runtime?: {
+    execution?: {
+      mode?: string;
+      timeout?: string;
+    };
+    workers?: {
+      min?: number;
+      max?: number;
+    };
+  };
+  storage?: {
+    provider?: string;
+    directory?: string;
+  };
+  inspector?: {
+    enabled?: boolean;
+    address?: string;
+  };
+  variables?: Record<string, unknown>;
 }
 
 export interface PortManifest {
