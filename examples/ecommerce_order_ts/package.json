@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "neuron-sdk": "tsx ../../packages/sdk/src/cli/command.ts",
     "start": "tsx index.ts",
     "typecheck": "tsc --noEmit"
   },

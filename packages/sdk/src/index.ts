@@ -14,10 +14,9 @@ export type {
   ServiceReference,
 } from "./service.js";
 
+export { defineConfig, type NeuronConfig } from "./cli/index.js";
 export { System, SystemDefinition } from "./system.js";
-
 export { Parallel } from "./composition.js";
-
 export { connect } from "./connection.js";
 
 export {

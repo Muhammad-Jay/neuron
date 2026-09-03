@@ -1,38 +1,37 @@
 import { Service, System, connect, string, type Expression } from "./index.js";
-import * as process from "node:process";
 
 interface GitHubReadInput {
-  owner: string;
-  repository: string;
-  path: string;
-  branch?: string;
+    owner: string;
+    repository: string;
+    path: string;
+    branch?: string;
 }
 
 interface GitHubReadOutput {
-  content: string;
-  path: string;
-  sha: string;
-  metadata: {
-    size: number;
-  };
+    content: string;
+    path: string;
+    sha: string;
+    metadata: {
+        size: number;
+    };
 }
 
 interface AnalyzeInput {
-  content: string;
-  path: string;
+    content: string;
+    path: string;
 }
 
 interface AnalyzeOutput {
-  summary: string;
+    summary: string;
 }
 
 const githubRead = Service("github.read")
-  .inputSchema<GitHubReadInput>()
-  .outputSchema<GitHubReadOutput>();
+    .inputSchema<GitHubReadInput>()
+    .outputSchema<GitHubReadOutput>();
 
 const analyzeContent = Service("analyze.content")
-  .inputSchema<AnalyzeInput>()
-  .outputSchema<AnalyzeOutput>();
+    .inputSchema<AnalyzeInput>()
+    .outputSchema<AnalyzeOutput>();
 
 githubRead.output.content satisfies Expression<string>;
 githubRead.output.path satisfies Expression<string>;
@@ -43,54 +42,54 @@ githubRead.output.metadata.size satisfies Expression<number>;
 githubRead.output.fileData;
 
 githubRead.withInput({
-  owner: "Muhammad-Jay",
-  repository: "neuron",
-  path: "README.md",
+    owner: "Muhammad-Jay",
+    repository: "neuron",
+    path: "README.md",
 });
 
 // @ts-expect-error required input path is missing.
 githubRead.withInput({
-  owner: "Muhammad-Jay",
-  repository: "neuron",
+    owner: "Muhammad-Jay",
+    repository: "neuron",
 });
 
 analyzeContent.withInput({
-  content: githubRead.output.content,
-  path: githubRead.output.path,
+    content: githubRead.output.content,
+    path: githubRead.output.path,
 });
 
 analyzeContent.withInput({
-  // @ts-expect-error number expressions cannot bind to string inputs.
-  content: githubRead.output.metadata.size,
-  path: githubRead.output.path,
+    // @ts-expect-error number expressions cannot bind to string inputs.
+    content: githubRead.output.metadata.size,
+    path: githubRead.output.path,
 });
 
 // @ts-expect-error sha is a string but the required path input is missing.
 analyzeContent.withInput({
-  content: githubRead.output.sha,
+    content: githubRead.output.sha,
 });
 
 analyzeContent.connect<GitHubReadOutput>((source) => ({
-  content: source.output.content,
-  path: source.output.path,
+    content: source.output.content,
+    path: source.output.path,
 }));
 
 analyzeContent.connect<GitHubReadOutput>((source) => ({
-  // @ts-expect-error source output has no fileData field.
-  content: source.output.fileData,
-  path: source.output.path,
+    // @ts-expect-error source output has no fileData field.
+    content: source.output.fileData,
+    path: source.output.path,
 }));
 
 connect<GitHubReadOutput, AnalyzeInput>((source) => ({
-  content: source.output.content,
-  path: source.output.path,
+    content: source.output.content,
+    path: source.output.path,
 }));
 
 const fromRuntimeSchema = Service("runtime")
-  .inputSchema({
-    requiredName: string().required(),
-    optionalName: string(),
-  });
+    .inputSchema({
+        requiredName: string().required(),
+        optionalName: string(),
+    });
 
 fromRuntimeSchema.withInput({ requiredName: "ok" });
 
@@ -98,12 +97,12 @@ fromRuntimeSchema.withInput({ requiredName: "ok" });
 fromRuntimeSchema.withInput({ optionalName: "ok" });
 
 System("repository-analysis")
-  .inputSchema<GitHubReadInput>()
-  .registerAll(githubRead, analyzeContent)
-  .withParams((input) =>
-    githubRead.withInput({
-      owner: input.owner,
-      repository: input.repository,
-      path: input.path,
-    })
-  );
+    .inputSchema<GitHubReadInput>()
+    .registerAll(githubRead, analyzeContent)
+    .withParams((input) =>
+        githubRead.withInput({
+            owner: input.owner,
+            repository: input.repository,
+            path: input.path,
+        })
+    );

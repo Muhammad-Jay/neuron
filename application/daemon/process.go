@@ -20,7 +20,7 @@ type Process struct {
 
 func isProcessAlive(pid int, proc *os.Process) bool {
 	if runtime.GOOS == "windows" {
-		// On Windows, FindProcess errors if the process doesn't exist
+		// On Windows, FindProcess errors.ts if the process doesn't exist
 		_, err := os.FindProcess(pid)
 		return err == nil
 	}

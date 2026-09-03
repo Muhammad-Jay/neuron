@@ -1,20 +1,14 @@
 export interface SystemManifest {
   apiVersion: "neuron/v1";
   kind: "System";
-
   metadata: {
     name: string;
     version: string;
     description?: string;
   };
-
   services: ServiceManifest[];
-
   inputs?: PortManifest[];
-
   connectors: ConnectorManifest[];
-
-
   definition: SystemNodeManifest;
 }
 
@@ -31,13 +25,9 @@ export interface ServiceManifest {
   };
 
   inputs: PortManifest[];
-
   outputs: PortManifest[];
-
   mappings: ServiceMappingManifest[];
-
   validations: ServiceValidationManifest[];
-
   config: Record<string, unknown>;
 
   execution?: {

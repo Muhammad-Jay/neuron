@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "neuron-sdk": "./dist/cli/command.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

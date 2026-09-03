@@ -11,7 +11,7 @@ import {
   sendConfirmation,
 } from "./services/index.js";
 
-export const manifest = System("order-processing")
+const manifest = System("order-processing")
   .version("1.0.0")
   .description("Order processing pipeline")
   .registerAll(
@@ -26,3 +26,5 @@ export const manifest = System("order-processing")
   )
   .run(pipeline)
   .toManifest();
+
+export default manifest
