@@ -113,7 +113,11 @@ func (m *Manager) GetOrCreate(ctx context.Context, key protocol.InstanceKey) (*I
 		delete(m.instancesByID, previous.ID)
 	}
 
-	i, err := New(m.parent, string(id), canonical, &reg.System, m.workers, m.store, withExecutors(reg))
+	execOpt, err := withExecutors(reg)
+	if err != nil {
+		return nil, false, err
+	}
+	i, err := New(m.parent, string(id), canonical, &reg.System, m.workers, m.store, execOpt)
 	if err != nil {
 		return nil, false, err
 	}
@@ -154,13 +158,12 @@ func (m *Manager) List(opts protocol.ListOptions) []*Instance {
 
 // withExecutors decodes the frozen executor set from the registered system's
 // opaque configuration so non-core executors can be launched.
-func withExecutors(reg system.RegisteredSystem) Option {
+func withExecutors(reg system.RegisteredSystem) (Option, error) {
 	resolved, err := plugin.DecodeResolvedExecutors(reg.ExecutionConfigurations)
 	if err != nil {
-		log.Printf("decode resolved executors for %s: %v", reg.Key.String(), err)
-		return nil
+		return nil, fmt.Errorf("decode resolved executors for %s: %w", reg.Key.String(), err)
 	}
-	return WithResolvedExecutors(resolved)
+	return WithResolvedExecutors(resolved), nil
 }
 
 func (m *Manager) Stop(id string) error {

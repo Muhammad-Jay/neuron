@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/executor"
@@ -108,12 +109,26 @@ func (c *Catalog) Require(typ, version string, registries []string) executor.Req
 		Type:    typ,
 		Version: version,
 	}
+	registries = nonEmptyRegistries(registries)
 	if len(registries) == 0 {
 		req.Registries = c.cfg.DefaultRegistries
 	} else {
 		req.Registries = registries
 	}
 	return req
+}
+
+func nonEmptyRegistries(registries []string) []string {
+	if len(registries) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(registries))
+	for _, name := range registries {
+		if strings.TrimSpace(name) != "" {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // Resolve resolves the requirements and freezes them for a Deployment.

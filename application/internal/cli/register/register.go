@@ -123,7 +123,11 @@ func resolveFrozenExecutors(ctx context.Context, cfg config.Config, requirements
 
 	executorReqs := make([]executor.Requirement, 0, len(requirements))
 	for _, req := range requirements {
-		executorReqs = append(executorReqs, catalog.Require(req.Name, req.Version, []string{req.Registry}))
+		var registries []string
+		if req.Registry != "" {
+			registries = []string{req.Registry}
+		}
+		executorReqs = append(executorReqs, catalog.Require(req.Name, req.Version, registries))
 	}
 
 	env, err := catalog.Resolve(ctx, executorReqs)

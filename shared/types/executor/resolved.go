@@ -1,5 +1,7 @@
 package executor
 
+import "path/filepath"
+
 // RuntimeInfo is the runtime portion of a frozen resolved executor. It is
 // duplicated from the package manifest so the deployment carries everything
 // required to launch the artifact without re-reading remote metadata.
@@ -55,5 +57,6 @@ func (r *ResolvedExecutor) EntrypointPath() string {
 	if r.RootDir == "" || r.Runtime.Entrypoint == "" {
 		return r.Runtime.Entrypoint
 	}
-	return r.RootDir + "/" + r.Runtime.Entrypoint
+	// Entrypoint is manifest-relative and stored with forward slashes.
+	return filepath.Join(r.RootDir, filepath.FromSlash(r.Runtime.Entrypoint))
 }

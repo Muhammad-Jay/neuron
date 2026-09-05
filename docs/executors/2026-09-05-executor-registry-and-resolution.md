@@ -1,7 +1,7 @@
 # Executor Registry & Resolution — Reference
 
 **Date:** 2026-09-05
-**Status:** current, mirrors the implementation at commit `1b71c14`
+**Status:** current, mirrors the implementation (base commit `1b71c14`, with the requirement default-registry fallback, cross-platform entrypoint path joining, and surfacing decode errors at instance creation — described inline)
 **Scope:** the external executor subsystem (`shared/types/executor`, `application/executor`, `application/internal/executorctl`, `application/internal/cli/executor`, `application/internal/cli/register`, `nore/internal/plugin`)
 
 This document is the single reference for how Neuron discovers, resolves,
@@ -132,7 +132,10 @@ Env vars injected by the runtime: `NEURON_EXECUTOR_PROTOCOL`,
 constraint** next to the **exact resolved version** so a Deployment is
 reproducible ("whatever is latest tomorrow" is never silently picked). Includes
 `RuntimeInfo{Type,Protocol,Entrypoint}`, `Digest`, `Registry`, `RootDir`.
-`EntrypointPath()` resolves the absolute entrypoint from `RootDir`.
+`EntrypointPath()` resolves the absolute entrypoint from `RootDir` via
+`filepath.Join(RootDir, filepath.FromSlash(entrypoint))` — the manifest stores
+entrypoints with forward slashes, and the join normalizes them to the host
+separator.
 
 ---
 
@@ -345,8 +348,14 @@ root when it is not `local://`.
 - `Installer{Store, Downloader: NewHTTPDownloader()}`,
   `Resolver(reg, store, installer)`.
 
-Exposed operations: `Require(type, version, registries)` (fills
-`DefaultRegistries`), `Resolve`, `Install`, `List`, `Inspect`, `Remove`.
+Exposed operations: `Require(type, version, registries)`, `Resolve`, `Install`,
+`List`, `Inspect`, `Remove`.
+
+`Require` normalizes the registry list first (`nonEmptyRegistries` drops empty /
+whitespace-only names). Only when the resulting list is empty does it fall back
+to `cfg.DefaultRegistries`. This means a requirement that declares **no** (or a
+blank) registry resolves against the configured defaults instead of failing on
+an empty registry name.
 
 ---
 
@@ -384,7 +393,9 @@ load config ──▶ bootstrap.SetupClient ──▶ manifest.LoadFromProjectRo
      └─▶ resolveFrozenExecutors(ctx, cfg, configs.ExecutorRequirements)
                 │
                 ├─ executorctl.BuildCatalog
-                ├─ catalog.Require(name, version, [registry]) per requirement
+                ├─ catalog.Require(name, version, registries) per requirement
+                │   (an empty manifest registry passes no registry, so
+                │    catalog.Require falls back to defaultRegistries)
                 ├─ catalog.Resolve → executor.Environment   (installs anything missing)
                 └─ installed.Frozen(requested[type]) per executor → []ResolvedExecutor
                     (requested version keyed by type, not by list index — ResolveMany
@@ -414,7 +425,9 @@ N.O.R.E. never depends on `application/compiler`. When an Instance is created
 
 1. `plugin.DecodeResolvedExecutors(payload)` JSON-round-trips the opaque payload
    into `[]shadexec.ResolvedExecutor` (works for both typed values in-process
-   and `map[string]any` re-read from disk).
+   and `map[string]any` re-read from disk). A malformed payload now **fails
+   `GetOrCreate`** (`withExecutors` returns the error up) instead of being
+   logged and silently skipped.
 2. `registry.RegisterCoreServiceExecutors()` registers the 6 in-process
    executors first.
 3. `plugin.RegisterProcessExecutors(reg, resolved)` registers a
