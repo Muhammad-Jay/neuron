@@ -4,5 +4,19 @@ export default defineConfig({
     entry: "./system.ts",
     script: {
         build: "echo 'building'"
+    },
+    config: {
+        inspector: {
+            enabled: true
+        },
+        storage: {
+            directory: "./home",
+            provider: "postgres"
+        },
+        runtime: {
+            execution: {
+                mode: "wait"
+            }
+        }
     }
 })

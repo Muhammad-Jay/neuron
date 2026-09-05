@@ -10,6 +10,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/daemon"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/execution"
+	"github.com/Muhammad-Jay/neuron/application/internal/cli/executor"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/initcmd"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/instance"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/register"
@@ -59,6 +60,7 @@ func init() {
 		daemon.New(),
 		initcmd.New(),
 		register.New(),
+		executor.New(),
 	)
 }
 

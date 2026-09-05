@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"github.com/Muhammad-Jay/neuron/application/compiler/manifest"
+	shadexec "github.com/Muhammad-Jay/neuron/shared/types/executor"
 )
 
 // ExecutionConfigurations is the consolidated project/runtime configuration
@@ -19,6 +20,13 @@ type ExecutionConfigurations struct {
 	// ExecutorRequirements is an indexed view of the executors each
 	// service requires, keyed by (type, version, source).
 	ExecutorRequirements []manifest.ExecutorRequirement `json:"executor_requirements,omitempty"`
+
+	// ResolvedExecutors is the frozen dependency set produced when a
+	// Deployment is prepared. Authoring and registering a System only records
+	// requirements; this slice pins the exact resolved version, registry and
+	// checksum so N.O.R.E. can execute services without resolving or
+	// installing anything.
+	ResolvedExecutors []shadexec.ResolvedExecutor `json:"resolved_executors,omitempty"`
 
 	// Runtime describes runtime execution defaults.
 	Runtime manifest.RuntimeConfig `json:"runtime,omitempty"`

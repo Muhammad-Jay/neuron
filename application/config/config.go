@@ -3,16 +3,21 @@
 // Configuration is assembled from several layers, each overriding the one
 // below it:
 //
-//	1. built-in defaults
-//	2. global user configuration  (~/.config/neuron/config.yaml)
-//	3. project configuration       (./neuron.yaml)
-//	4. environment variables       (NEURON_*)
-//	5. command-line overrides      (Options.CLI)
+//  1. built-in defaults
+//  2. global user configuration  (~/.config/neuron/config.yaml)
+//  3. project configuration       (./neuron.yaml)
+//  4. environment variables       (NEURON_*)
+//  5. command-line overrides      (Options.CLI)
 //
 // The rest of Neuron never touches Viper or the YAML representation. It only
 // sees this typed Config, which is why the loader is the only file in this
 // package that depends on Viper.
 package config
+
+import (
+	"os"
+	"path/filepath"
+)
 
 // Config is the effective Neuron configuration.
 type Config struct {
@@ -75,7 +80,26 @@ type StorageConfig struct {
 // against. A service only declares `type`/`version`; the registry resolution
 // system determines where the executor comes from.
 type ExecutorsConfig struct {
+	// Registries lists the registry providers Neuron can resolve executors
+	// against.
 	Registries []ExecutorRegistry `yaml:"registries,omitempty" mapstructure:"registries"`
+
+	// StoreDir is the local installed-executor directory. Defaults to
+	// ~/.neuron/executors.
+	StoreDir string `yaml:"storeDir,omitempty" mapstructure:"storeDir"`
+
+	// DefaultRegistries is the ordered list of registry names a Requirement
+	// uses when it declares no registries of its own.
+	DefaultRegistries []string `yaml:"defaultRegistries,omitempty" mapstructure:"defaultRegistries"`
+}
+
+// DefaultStoreDir returns the store directory used when none is configured.
+func DefaultStoreDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".neuron/executors"
+	}
+	return filepath.Join(home, ".neuron", "executors")
 }
 
 // ExecutorRegistry identifies a source of executor definitions.

@@ -14,12 +14,14 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/execution/engine"
 	"github.com/Muhammad-Jay/neuron/nore/internal/execution/scheduler"
 	"github.com/Muhammad-Jay/neuron/nore/internal/planner"
+	"github.com/Muhammad-Jay/neuron/nore/internal/plugin"
 	"github.com/Muhammad-Jay/neuron/nore/internal/registry"
 	"github.com/Muhammad-Jay/neuron/nore/internal/resolver"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/nore/internal/stream"
 	"github.com/Muhammad-Jay/neuron/nore/internal/types"
 	shared "github.com/Muhammad-Jay/neuron/shared/types/core"
+	shadexec "github.com/Muhammad-Jay/neuron/shared/types/executor"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
 
@@ -32,6 +34,23 @@ const (
 	StatusStopped  Status = "stopped"
 	StatusFailed   Status = "failed"
 )
+
+// Option configures an Instance at construction time.
+type Option func(*options)
+
+type options struct {
+	// resolvedExecutors is the frozen dependency set from the registered
+	// system. Non-core executors are launched as subprocesses.
+	resolvedExecutors []shadexec.ResolvedExecutor
+}
+
+// WithResolvedExecutors supplies the frozen executor set persisted with the
+// system's registration.
+func WithResolvedExecutors(resolved []shadexec.ResolvedExecutor) Option {
+	return func(o *options) {
+		o.resolvedExecutors = resolved
+	}
+}
 
 type Instance struct {
 	ID        string
@@ -65,6 +84,7 @@ func New(
 	system *shared.System,
 	workers int,
 	persistentStore storage.Store,
+	opts ...Option,
 ) (*Instance, error) {
 	if system == nil {
 		return nil, fmt.Errorf("blueprint is required")
@@ -76,11 +96,24 @@ func New(
 	ctx, cancel := context.WithCancel(parent)
 	bus := event.NewBus()
 
+	var optsApplied options
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&optsApplied)
+		}
+	}
+
 	store := execution.NewExecutionStore(persistentStore)
 	evtStore := event.NewStore(persistentStore)
 
 	reg := registry.New()
 	reg.RegisterCoreServiceExecutors()
+
+	if err := plugin.RegisterProcessExecutors(reg, optsApplied.resolvedExecutors); err != nil {
+		cancel()
+		bus.Close()
+		return nil, fmt.Errorf("register process executors: %w", err)
+	}
 
 	sched, err := scheduler.New(bus, store)
 	if err != nil {

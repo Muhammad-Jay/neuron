@@ -32,10 +32,15 @@ func Defaults() Config {
 		},
 
 		Executors: ExecutorsConfig{
+			StoreDir: DefaultStoreDir(),
 			Registries: []ExecutorRegistry{
 				{
-					Name: "official",
-					URL:  "https://registry.neuron.dev",
+					Name: "github",
+					URL:  "https://api.github.com",
+				},
+				{
+					Name: "local",
+					URL:  "local://",
 				},
 			},
 		},

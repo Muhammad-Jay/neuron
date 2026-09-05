@@ -16,5 +16,10 @@ var (
 
 	Daemon = "daemon"
 
+	Executor      = "executor"
+	ExecutorInstall = "install [name@version]"
+	ExecutorList    = "list"
+	ExecutorInspect = "inspect [name@version]"
+	ExecutorRemove  = "remove [name@version]"
 )
 

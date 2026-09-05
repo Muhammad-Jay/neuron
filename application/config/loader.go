@@ -123,6 +123,11 @@ func registerDefaults(v *viper.Viper, cfg Config) {
 		}
 		v.SetDefault("executors.registries", items)
 	}
+
+	v.SetDefault("executors.storeDir", cfg.Executors.StoreDir)
+	if len(cfg.Executors.DefaultRegistries) > 0 {
+		v.SetDefault("executors.defaultRegistries", cfg.Executors.DefaultRegistries)
+	}
 }
 
 // resolvePaths expands any relative or "~"-prefixed path fields against the
@@ -131,6 +136,7 @@ func resolvePaths(cfg *Config, projectDir string) {
 	cfg.Storage.Directory = Expand(cfg.Storage.Directory, projectDir)
 	cfg.Daemon.Socket = Expand(cfg.Daemon.Socket, projectDir)
 	cfg.Daemon.PIDFile = Expand(cfg.Daemon.PIDFile, projectDir)
+	cfg.Executors.StoreDir = Expand(cfg.Executors.StoreDir, projectDir)
 
 	if cfg.Daemon.NorePath != "" {
 		cfg.Daemon.NorePath = Expand(cfg.Daemon.NorePath, projectDir)

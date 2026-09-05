@@ -8,6 +8,7 @@ import (
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/event"
 	"github.com/Muhammad-Jay/neuron/nore/internal/execution"
+	"github.com/Muhammad-Jay/neuron/nore/internal/plugin"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/nore/internal/system"
 	core2 "github.com/Muhammad-Jay/neuron/shared/types/core"
@@ -20,11 +21,11 @@ type Manager struct {
 	instancesByKey map[protocol.InstanceKey]*Instance
 	instancesByID  map[string]*Instance
 
-	parent  context.Context
-	workers int
-	store   storage.Store
+	parent   context.Context
+	workers  int
+	store    storage.Store
 	metadata *metadataStore
-	systems *system.Repository
+	systems  *system.Repository
 }
 
 func NewManager(parent context.Context, workers int, store storage.Store, systems *system.Repository) *Manager {
@@ -112,7 +113,7 @@ func (m *Manager) GetOrCreate(ctx context.Context, key protocol.InstanceKey) (*I
 		delete(m.instancesByID, previous.ID)
 	}
 
-	i, err := New(m.parent, string(id), canonical, &reg.System, m.workers, m.store)
+	i, err := New(m.parent, string(id), canonical, &reg.System, m.workers, m.store, withExecutors(reg))
 	if err != nil {
 		return nil, false, err
 	}
@@ -149,6 +150,17 @@ func (m *Manager) List(opts protocol.ListOptions) []*Instance {
 	}
 
 	return result
+}
+
+// withExecutors decodes the frozen executor set from the registered system's
+// opaque configuration so non-core executors can be launched.
+func withExecutors(reg system.RegisteredSystem) Option {
+	resolved, err := plugin.DecodeResolvedExecutors(reg.ExecutionConfigurations)
+	if err != nil {
+		log.Printf("decode resolved executors for %s: %v", reg.Key.String(), err)
+		return nil
+	}
+	return WithResolvedExecutors(resolved)
 }
 
 func (m *Manager) Stop(id string) error {
