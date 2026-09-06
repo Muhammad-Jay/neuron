@@ -72,6 +72,8 @@ type Instance struct {
 	scheduler *scheduler.Scheduler
 	engine    *engine.ExecutorEngine
 
+	registry *registry.Registry
+
 	analytics *analytics.Analytics
 
 	execPersister *executionPersister
@@ -109,10 +111,10 @@ func New(
 	reg := registry.New()
 	reg.RegisterCoreServiceExecutors()
 
-	if err := plugin.RegisterProcessExecutors(reg, optsApplied.resolvedExecutors); err != nil {
+	if err := plugin.RegisterResolvedExecutors(reg, optsApplied.resolvedExecutors); err != nil {
 		cancel()
 		bus.Close()
-		return nil, fmt.Errorf("register process executors: %w", err)
+		return nil, fmt.Errorf("register resolved executors: %w", err)
 	}
 
 	sched, err := scheduler.New(bus, store)
@@ -177,6 +179,7 @@ func New(
 		eventStore:    evtStore,
 		scheduler:     sched,
 		engine:        execEngine,
+		registry:      reg,
 		analytics:     anly,
 		execPersister: persister,
 	}
@@ -256,6 +259,17 @@ func (i *Instance) Stop() error {
 	i.cancel()
 	if i.bus != nil {
 		i.wg.Wait()
+	}
+
+	// Release executor-backed resources (wasm runtimes) now that no execution
+	// can be in flight.
+	if i.registry != nil {
+		if err := i.registry.Close(); err != nil {
+			slog.Warn("close executors", slog.String("instance", i.ID), slog.String("error", err.Error()))
+		}
+	}
+
+	if i.bus != nil {
 		i.bus.Close()
 	}
 

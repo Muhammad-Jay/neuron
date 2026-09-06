@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/Muhammad-Jay/neuron/application/config"
-	"github.com/Muhammad-Jay/neuron/application/internal/cli/build"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/daemon"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/execution"
@@ -54,7 +53,6 @@ func init() {
 
 	RootCmd.AddCommand(
 		run.New(),
-		build.New(),
 		instance.New(),
 		execution.New(),
 		daemon.New(),
@@ -70,6 +68,17 @@ func loadConfig(cmd *cobra.Command) (config.Config, error) {
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return config.Config{}, fmt.Errorf("get current directory: %w", err)
+	}
+
+	// Subcommands may redirect the project root with --root. The config is
+	// then resolved from that directory so neuron.yaml follows the project.
+	if root, err := cmd.Flags().GetString("root"); err == nil && root != "" {
+		if filepath.IsAbs(root) {
+			projectDir = root
+		} else {
+			projectDir = filepath.Join(projectDir, root)
+		}
+		projectDir = filepath.Clean(projectDir)
 	}
 
 	cli := map[string]any{}

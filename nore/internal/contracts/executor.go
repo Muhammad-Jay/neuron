@@ -47,6 +47,14 @@ type Executor interface {
 	Execute(ctx context.Context, execution ExecutionContext) (map[string]any, error)
 }
 
+// ExecutorCloser is implemented by executors that own runtime resources (for
+// example a wasm runtime) that must be released when the owning instance
+// stops. Instances call Close on every registered executor before shutting
+// down.
+type ExecutorCloser interface {
+	Close() error
+}
+
 type ExecutorRegistry interface {
 	Register(serviceType core2.ServiceType, executor Executor) error
 	Resolve(serviceType core2.ServiceType) (Executor, error)

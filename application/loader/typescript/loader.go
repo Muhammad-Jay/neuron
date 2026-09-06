@@ -1,6 +1,8 @@
 package typescript
 
 import (
+	"context"
+
 	"github.com/Muhammad-Jay/neuron/application/process"
 )
 
@@ -15,7 +17,11 @@ func NewTSLoader(cmd process.Command) *TSLoader {
 }
 
 func (l *TSLoader) Build() error {
-	if _, err := l.process.Run(); err != nil {
+	return l.BuildContext(context.Background())
+}
+
+func (l *TSLoader) BuildContext(ctx context.Context) error {
+	if _, err := l.process.RunContext(ctx); err != nil {
 		return err
 	}
 	return nil

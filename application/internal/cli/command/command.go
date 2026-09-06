@@ -5,8 +5,6 @@ var (
 
 	Run = "run"
 
-	Build = "build"
-
 	Init = "init [Target]"
 
 	Instance = "instance"

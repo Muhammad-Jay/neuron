@@ -3,7 +3,9 @@
 # ------------------------------------------------------------------------------
 # Output binaries
 neuron
-nore
+# N.O.R.E. daemon binaries (go build ./cmd/nore)
+nore/nore
+nore/cmd/nore/nore
 *.exe
 *.exe?
 *.dll
@@ -11,7 +13,6 @@ nore
 *.dylib
 
 # Test and coverage artifacts
-*_test.go
 *.test
 *.out
 *.prof

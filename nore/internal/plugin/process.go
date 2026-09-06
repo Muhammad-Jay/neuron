@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
@@ -46,23 +47,42 @@ func DecodeResolvedExecutors(payload any) ([]shadexec.ResolvedExecutor, error) {
 	return cfg.ResolvedExecutors, nil
 }
 
-// RegisterProcessExecutors registers a process executor for every frozen type
+// RegisterResolvedExecutors registers a runtime adapter for every frozen type
 // that does not already have an in-process executor (core executors win).
-func RegisterProcessExecutors(reg contracts.ExecutorRegistry, resolved []shadexec.ResolvedExecutor) error {
+// The adapter is chosen by the executor's runtime kind.
+func RegisterResolvedExecutors(reg contracts.ExecutorRegistry, resolved []shadexec.ResolvedExecutor) error {
 	for _, r := range resolved {
 		if _, err := reg.Resolve(core.ServiceType(r.Type)); err == nil {
 			// Core in-process executor already registered; prefer it.
 			continue
 		}
-		adapter, err := NewProcessAdapter(r)
+		adapter, err := NewAdapter(r)
 		if err != nil {
-			return fmt.Errorf("create process executor for %s: %w", r.Type, err)
+			return fmt.Errorf("create executor for %s: %w", r.Type, err)
 		}
 		if err := reg.Register(core.ServiceType(r.Type), adapter); err != nil {
-			return fmt.Errorf("register process executor for %s: %w", r.Type, err)
+			return fmt.Errorf("register executor for %s: %w", r.Type, err)
 		}
 	}
 	return nil
+}
+
+// NewAdapter builds the runtime adapter matching a frozen executor's runtime
+// kind. It rejects kinds this build cannot launch.
+func NewAdapter(resolved shadexec.ResolvedExecutor) (contracts.Executor, error) {
+	switch resolved.Runtime.Type {
+	case "", shadexec.RuntimeKindProcess:
+		return NewProcessAdapter(resolved)
+	case shadexec.RuntimeKindWasm:
+		return NewWasmAdapter(resolved)
+	default:
+		return nil, fmt.Errorf(
+			"executor %s: unsupported runtime kind %q (supported: %s)",
+			resolved.Type,
+			resolved.Runtime.Type,
+			strings.Join(shadexec.SupportedRuntimeKinds(), ", "),
+		)
+	}
 }
 
 // ProcessAdapter runs a resolved executor as a subprocess per execution.
@@ -77,6 +97,9 @@ func NewProcessAdapter(resolved shadexec.ResolvedExecutor) (*ProcessAdapter, err
 	entrypoint := resolved.EntrypointPath()
 	if entrypoint == "" {
 		return nil, fmt.Errorf("executor %s: no entrypoint", resolved.Type)
+	}
+	if _, err := os.Stat(entrypoint); err != nil {
+		return nil, fmt.Errorf("executor %s: stat entrypoint %s: %w", resolved.Type, entrypoint, err)
 	}
 	return &ProcessAdapter{
 		resolved:    resolved,

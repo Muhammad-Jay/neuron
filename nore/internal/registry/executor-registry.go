@@ -2,6 +2,8 @@ package registry
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
@@ -48,6 +50,36 @@ func (r *Registry) RegisterCoreServiceExecutors() {
 	must(r.Register("http", executors.HttpExecutor{}))
 	must(r.Register("delay", executors.DelayExecutor{}))
 	must(r.Register("command", executors.CommandExecutor{}))
+}
+
+// Close releases resources held by registered executors that implement
+// contracts.ExecutorCloser (e.g. wasm runtimes). It is idempotent and safe to
+// call from an instance shutdown path once no execution is in flight.
+func (r *Registry) Close() error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var failures []string
+	types := make([]string, 0, len(r.executors))
+	for serviceType := range r.executors {
+		types = append(types, string(serviceType))
+	}
+	sort.Strings(types)
+
+	for _, serviceType := range types {
+		closer, ok := r.executors[core.ServiceType(serviceType)].(contracts.ExecutorCloser)
+		if !ok {
+			continue
+		}
+		if err := closer.Close(); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", serviceType, err))
+		}
+	}
+
+	if len(failures) > 0 {
+		return fmt.Errorf("close executors: %s", strings.Join(failures, "; "))
+	}
+	return nil
 }
 
 func must(err error) {

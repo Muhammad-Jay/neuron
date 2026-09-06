@@ -96,6 +96,7 @@ func Load(opts Options) (Config, error) {
 // overrides from lower layers fall through to the compiled-in value.
 func registerDefaults(v *viper.Viper, cfg Config) {
 	v.SetDefault("version", cfg.Version)
+	v.SetDefault("lang", cfg.Lang)
 
 	v.SetDefault("runtime.execution.mode", cfg.Runtime.Execution.Mode)
 	v.SetDefault("runtime.execution.timeout", cfg.Runtime.Execution.Timeout)
@@ -144,7 +145,7 @@ func resolvePaths(cfg *Config, projectDir string) {
 }
 
 func findProjectConfig(projectDir string) string {
-	for _, name := range []string{"neuron.yaml", "neuron.yml"} {
+	for _, name := range []string{"neuron.yaml", "neuron.yml", "neuron.config.yaml", "neuron.config.yml", "neuron.config.json"} {
 		p := filepath.Join(projectDir, name)
 		if fileExists(p) {
 			return p

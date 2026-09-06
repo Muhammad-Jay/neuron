@@ -16,4 +16,4 @@ done && for pkg in ./packages/*; do
         pnpm build &&
         echo "$pkg built successfully" || echo "$pkg build failed"
     )
-done
+done && echo "All tests and builds passed successfully!"

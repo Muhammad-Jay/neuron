@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/Muhammad-Jay/neuron/application/build"
 	"github.com/Muhammad-Jay/neuron/application/compiler"
 	"github.com/Muhammad-Jay/neuron/application/compiler/manifest"
 	"github.com/Muhammad-Jay/neuron/application/config"
@@ -12,19 +14,26 @@ import (
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/executorctl"
+	"github.com/Muhammad-Jay/neuron/application/language"
 	"github.com/Muhammad-Jay/neuron/application/project"
 	shadexec "github.com/Muhammad-Jay/neuron/shared/types/executor"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 	"github.com/spf13/cobra"
 )
 
+// New returns the `neuron register` command. It builds the project (YAML or
+// TypeScript) and registers the resulting manifest with N.O.R.E. in one step.
 func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   command.Register,
-		Short: "Register the current project to N.O.R.E",
-		Long:  "Load the built .neuron/manifest.json, compile it to a core.System, and register it with N.O.R.E. Requires `neuron build` to have been run first.",
+		Short: "Build and register the current project to N.O.R.E",
+		Long:  "Build the project for the given authoring language, compile the resulting .neuron/manifest.json to a core.System, and register it with N.O.R.E. ",
 		RunE:  registerCmdHandler,
 	}
+
+	f := cmd.Flags()
+	f.StringP("lang", "l", "", "project authoring language (yaml, yml, typescript, ts)")
+	f.StringP("root", "r", "", "project root (defaults to the current directory)")
 
 	return cmd
 }
@@ -37,21 +46,46 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("configuration not loaded")
 	}
 
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	langFlag, _ := cmd.Flags().GetString("lang")
+	rootFlag, _ := cmd.Flags().GetString("root")
+
+	lang, err := language.Resolve(langFlag, cfg.Lang)
+	if err != nil {
+		return err
+	}
+
+	root, err := resolveRoot(rootFlag)
+	if err != nil {
+		return err
+	}
+
+	// Build the project into the canonical .neuron/manifest.json for the
+	// resolved language.
+	if err := build.Build(ctx, lang, build.Options{
+		Root:    root,
+		Verbose: verbose,
+		Out:     cmd.ErrOrStderr(),
+	}); err != nil {
+		return fmt.Errorf("build project: %w", err)
+	}
+
+	return register(ctx, cfg, root, verbose)
+}
+
+// register performs the compile + resolve + register flow against the manifest
+// already produced at root.
+func register(ctx context.Context, cfg config.Config, root string, verbose bool) error {
 	c, cleanup, err := bootstrap.SetupClient(ctx, bootstrap.Options{Config: cfg})
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	root, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("get current directory: %w", err)
-	}
-
-	// Load the canonical manifest produced by `neuron build`.
+	// Load the canonical manifest produced by the build step.
 	m, err := manifest.LoadFromProjectRoot(root)
 	if err != nil {
-		return fmt.Errorf("load manifest (run `neuron build` first): %w", err)
+		return fmt.Errorf("load manifest (a `%s` build must write .neuron/manifest.json): %w", "neuron register", err)
 	}
 
 	// Compile the manifest into the runtime core.System representation.
@@ -96,6 +130,23 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error {
 	printRegistration(result)
 
 	return nil
+}
+
+// resolveRoot normalizes the honored project root: flag first, cwd fallback.
+func resolveRoot(flag string) (string, error) {
+	root := flag
+	if root == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("get current directory: %w", err)
+		}
+		root = cwd
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root %q: %w", root, err)
+	}
+	return abs, nil
 }
 
 func printRegistration(result protocol.RegisterResponse) {

@@ -22,6 +22,7 @@ import (
 // Config is the effective Neuron configuration.
 type Config struct {
 	Version   int             `yaml:"version,omitempty"   mapstructure:"version"`
+	Lang      string          `yaml:"lang,omitempty"      mapstructure:"lang"`
 	Runtime   RuntimeConfig   `yaml:"runtime"             mapstructure:"runtime"`
 	Daemon    DaemonConfig    `yaml:"daemon"              mapstructure:"daemon"`
 	Storage   StorageConfig   `yaml:"storage"             mapstructure:"storage"`
