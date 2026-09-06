@@ -66,8 +66,8 @@ func ExtractTarGz(archivePath, dst string) error {
 		}
 
 		rel := clean
-		if strings.HasPrefix(rel, prefix) {
-			rel = strings.TrimPrefix(rel, prefix)
+		if after, ok :=strings.CutPrefix(rel, prefix); ok  {
+			rel = after
 		}
 		if rel == "" {
 			continue

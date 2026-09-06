@@ -5,6 +5,7 @@
   "scripts": {
     "build:sdk": "pnpm --filter @neuron/sdk build",
     "test:sdk": "pnpm --filter @neuron/sdk test",
-    "typecheck:sdk": "pnpm --filter @neuron/sdk typecheck"
+    "typecheck:sdk": "pnpm --filter @neuron/sdk typecheck",
+    "script": "bash scripts/script.sh"
   }
 }
