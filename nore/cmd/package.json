@@ -1,0 +1,12 @@
+{
+  "name": "nore/cmd",
+  "version": "1.0.0",
+  "scripts": {
+    "build:nore": "go build -o ./nore/nore-daemon ./nore",
+    "run:nore": "nore/nore"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}

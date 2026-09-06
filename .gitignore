@@ -5,7 +5,8 @@
 neuron
 # N.O.R.E. daemon binaries (go build ./cmd/nore)
 nore/nore
-nore/cmd/nore/nore
+nore-daemon
+nore/cmd/nore/nore-daemon
 *.exe
 *.exe?
 *.dll

@@ -30,7 +30,7 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		BinaryPath:     "nore",
+		BinaryPath:     "nore-daemon",
 		Args:           []string{"serve"},
 		StartTimeout:   10 * time.Second,
 		HealthInterval: 100 * time.Millisecond,
