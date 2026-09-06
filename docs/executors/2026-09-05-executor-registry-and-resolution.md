@@ -1,97 +1,95 @@
-# Executor Registry & Resolution — Reference
+# Executor Registry & Resolution
 
-**Date:** 2026-09-05
-**Status:** current, mirrors the implementation (base commit `1b71c14`, with the requirement default-registry fallback, cross-platform entrypoint path joining, and surfacing decode errors at instance creation — described inline)
-**Scope:** the external executor subsystem (`shared/types/executor`, `application/executor`, `application/internal/executorctl`, `application/internal/cli/executor`, `application/internal/cli/register`, `nore/internal/plugin`)
+Status: current, mirrors the implementation on `main` (commit `66bf2a0`).
 
-This document is the single reference for how Neuron discovers, resolves,
-installs, freezes, and executes external executor packages. It is written for
-future developers (including past-us) to answer three questions:
+This document is the reference for how Neuron handles external executors: how
+a service declares one, how it is found and installed, how it is frozen into a
+Deployment, and how N.O.R.E. eventually runs it — either as a child process or
+as an embedded Wasm module. It is written for whoever works on any layer of
+this stack, including future us, and it answers three questions:
 
 1. What is an executor, and what is a requirement?
-2. How does resolution + installation actually work?
-3. What happens when `neuron register` (or any executor command) runs?
+2. How does resolution and installation actually work?
+3. What happens when `neuron register` runs, and how does an Instance launch the
+   frozen executors?
 
----
+Every section links to the source that implements what it describes, so you can
+follow along in the code instead of trusting prose.
 
-## 1. Concepts
+## The big picture
 
 Core executors (`set`, `ai`, `log`, `http`, `delay`, `command`) are in-process
-implementations hardcoded in `nore/internal/registry`. **External executors**
-are the same idea, but shipped independently and executed out of process.
+implementations that live in [nore/internal/registry](../../nore/internal/registry). An external executor is
+the same idea, but shipped independently: a native binary or a `wasm32-wasi`
+module that speaks the same wire protocol. Because the artifact is installed
+separately, everything about it is discoverable, versioned, and verifiable at
+registration time.
 
-| Term | Meaning |
-| --- | --- |
-| **Requirement** | What a service *asks for*: a logical type + optional version + registries. A request, never a resolution. |
-| **Executor type** | The logical name of an executor, e.g. `github:read`, `hashicorp:vault:auth`. |
-| **Package** | An immutable, resolvable artifact from a registry (one exact version, pre-install). |
-| **Provider / Registry** | Something that serves Packages (`github`, `local`). The catalog of providers is the `Registry`. |
-| **SelectVersion** | Version selection above a provider: semver-aware, never trusts the provider's ordering. |
-| **Installed** | A verified, atomically-renamed artifact in the store (`~/.neuron/executors/...`). |
-| **ResolvedExecutor** | The *frozen* wire record persisted in a Deployment: pinned version, registry, digest, launch info. |
-| **Deployment** | A registered System + its frozen executor set. Instances execute from the frozen set; they never resolve or install. |
+The flow has four stages, and each stage is replaceable on its own:
 
-The pipeline is layered so each stage is replaceable:
+A project declares a *requirement*: a logical type plus an optional version
+constraint and an optional registry. The *resolver* turns that requirement into
+a *package* from a *provider* (GitHub Releases or the local directory
+registry). The *installer* verifies the artifact and puts it into the local
+store atomically, producing an *installed* executor. At register time, the
+exact resolutions are *frozen* into the Deployment as `ResolvedExecutor`
+records. Instances only ever consume frozen records; they never resolve or
+install on their own.
 
-```
-Requirement ──▶ Resolver ──▶ Provider(s) ──▶ Package ──▶ Installer ──▶ Store ──▶ Installed
-                                    ▲             ▲                                  │
-                              GitHub / local   version pick                        ▼
-                                                                         frozen ResolvedExecutor
-                                                                                    │
-                                                                                    ▼
-                                                                              runtime / nore
-```
+The contract that connects the two halves of the system is the wire schema in
+[shared/types/executor](../../shared/types/executor). The application layer (`application/`), which resolves
+and installs, and the runtime layer (`nore/`), which executes, both compile
+against that package and neither imports the other's machinery.
 
----
+## Project authoring and the canonical manifest
 
-## 2. Requirements & logical names
+A project is written in one of two authoring languages: YAML or TypeScript.
+The project-wide identifier for a language is a `language.Language`
+(`yaml` or `typescript`), defined in [application/language/language.go](../../application/language/language.go). The
+accepted tokens are `yaml`, `yml`, `typescript`, and `ts`, normalized
+case-insensitively to the canonical form.
 
-Source: `application/executor/requirement.go`.
+Every building block that wants to produce a manifest goes through the builder
+registry in [application/build/build.go](../../application/build/build.go). A builder implements the `builder.Builder`
+contract from [application/build/builder/builder.go](../../application/build/builder/builder.go): it declares the language
+it handles and produces `.neuron/manifest.json` for a project root. The YAML
+builder is [application/build/yaml/yaml.go](../../application/build/yaml/yaml.go); it resolves the project structure
+(`systems/`, `services/`, `connectors/`) and materializes the manifest. The
+TypeScript builder is [application/build/typescript/typescript.go](../../application/build/typescript/typescript.go); it compiles
+a generated SDK program that declares the same structure. Both are registered
+in the `init` of the build package, so a future language is just a new builder —
+the CLI and the runtime never change.
 
-A `Requirement` is:
+The manifest file is the single artifact that connects authoring to the
+platform. It is defined by [application/compiler/manifest](../../application/compiler/manifest) and written with
+`manifest.SaveToProjectRoot`. Everything downstream reads this file, never the
+original project source.
 
-```go
-Requirement{
-    Type:       "github:read",     // logical executor name
-    Version:    "^1.0.0",          // optional: "" | exact "1.2.0" | constraint "^1.0.0", "~1.5.0", ">=2.0.0"
-    Registries: []string{"github"}, // optional: fall back to configured defaults
-}
-```
+## The wire contract
 
-### 2.1 Logical names (`ParseType`)
+The registry, resolver, and installer are consumer-side machinery; none of it
+lives in [shared/types/executor](../../shared/types/executor). That package only declares the schema both
+sides agree on, and it stays dependency-free.
 
-A logical name is a `:`-separated path. **The first segment is always the
-owner**; at least one functional segment must follow.
+### Runtime kinds
 
-| Type | Owner | PathSegments |
-| --- | --- | --- |
-| `github:read` | `github` | `[read]` |
-| `Muhammad-Jay:github:read` | `Muhammad-Jay` | `[github, read]` |
-| `hashicorp:vault:auth` | `hashicorp` | `[vault, auth]` |
+[shared/types/executor/runtime.go](../../shared/types/executor/runtime.go) defines how a frozen artifact is launched.
+The value stored in a manifest and in `RuntimeInfo.Type` is one of these
+constants:
 
-Two projections matter downstream:
+- `process` launches the entrypoint as an OS child process.
+- `wasm` launches the entrypoint inside the embedded WASI runtime, speaking the
+  same protocol as a process executor.
+- `container`, `remote`, and older reserved names are rejected by the runtime
+  layer with an explicit "unsupported runtime kind" error, rather than being
+  silently mis-executed.
 
-- `NameSplit.ToGitHubRepo()` → `owner/repo`, trailing segments **hyphen-joined**
-  (GitHub has no nested repos). `Muhammad-Jay:github:read` → `Muhammad-Jay/github-read`.
-- `NameSplit.ToLocalPath()` → store-relative directory, segments **slash-joined**.
-  `Muhammad-Jay:github:read` → `Muhammad-Jay/github/read`.
-- `NormalizeType` / `TypePath` round-trip a name to/from these forms.
+`SupportedRuntimeKinds()` lists what the runtime layer can actually launch.
 
-`Validate()` requires a non-empty type that can be parsed (at least one `:`).
+### The `executor.json` manifest
 
----
-
-## 3. The wire contract (`shared/types/executor`)
-
-Registry/resolution/install machinery never lives here. This package only
-declares the schema **both sides** agree on, so N.O.R.E. never imports registry
-code. It must stay dependency-free.
-
-### 3.1 `executor.json` manifest (`manifest.go`)
-
-The manifest shipped with every package. Constants: `APIVersion = "neuron/v1"`,
-`Kind = "Executor"`, `ManifestFile = "executor.json"`, `InstallFile = "install.json"`.
+Every package ships a manifest ([shared/types/executor/manifest.go](../../shared/types/executor/manifest.go)) describing
+its name, version, runtime, services, capabilities, and per-platform artifacts:
 
 ```json
 {
@@ -105,218 +103,123 @@ The manifest shipped with every package. Constants: `APIVersion = "neuron/v1"`,
 }
 ```
 
-Validation (`Manifest.Validate()`) requires: correct `apiVersion`/`kind`,
-non-empty `metadata.name`, `metadata.version`, `runtime.type`, `runtime.entrypoint`,
-and at least one service. `HasCapability` checks an opt-in capability.
+Validation requires a correct `apiVersion` and `kind`, a non-empty name,
+version, runtime type, entrypoint, and at least one service.
 
-### 3.2 Process protocol (`protocol.go`)
+### The execution protocol
 
-A process executor reads **one JSON Request from stdin**, writes **one JSON
-Response to stdout**, and exits zero. Everything else on stderr is diagnostics.
+[shared/types/executor/protocol.go](../../shared/types/executor/protocol.go) fixes the wire format for an execution. An
+executor reads one JSON request from stdin, writes one JSON response to stdout,
+and exits. Everything on stderr is diagnostics.
 
 ```json
-// stdin                           // stdout
-{ "input": { "repo": "..." } }    { "output": { "data": "..." }, "error": "" }
+{ "input": { "repo": "..." } }
+{ "output": { "data": "..." }, "error": "" }
 ```
 
-Request: `{ "input": map[string]any }`.
-Response: `{ "output": map[string]any, "error": string }` — non-empty `error`
-is a controlled failure even with exit 0.
+A non-empty `error` in the response is a controlled failure even when the exit
+code is zero. The runtime injects three environment variables:
+`NEURON_EXECUTOR_PROTOCOL`, `NEURON_EXECUTOR_TYPE`, and
+`NEURON_EXECUTOR_VERSION`.
 
-Env vars injected by the runtime: `NEURON_EXECUTOR_PROTOCOL`,
-`NEURON_EXECUTOR_TYPE`, `NEURON_EXECUTOR_VERSION`.
+### The resolved (frozen) record
 
-### 3.3 Frozen record (`resolved.go`)
-
-`ResolvedExecutor` is what a Deployment persists. It records the **requested
-constraint** next to the **exact resolved version** so a Deployment is
-reproducible ("whatever is latest tomorrow" is never silently picked). Includes
-`RuntimeInfo{Type,Protocol,Entrypoint}`, `Digest`, `Registry`, `RootDir`.
-`EntrypointPath()` resolves the absolute entrypoint from `RootDir` via
-`filepath.Join(RootDir, filepath.FromSlash(entrypoint))` — the manifest stores
-entrypoints with forward slashes, and the join normalizes them to the host
+[shared/types/executor/resolved.go](../../shared/types/executor/resolved.go) is what a Deployment persists instead of a
+requirement. It records the requested constraint next to the exact resolved
+version so a Deployment is reproducible — "whatever is latest tomorrow" is
+never silently picked. It includes the runtime info, the digest, the registry,
+and the install root. `EntrypointPath()` joins the install root with the
+manifest-relative entrypoint, normalizing forward slashes to the host
 separator.
 
----
+## Requirements and logical naming
 
-## 4. Resolution & installation pipeline (`application/executor`)
+A requirement is a request, never a resolution. It is defined in
+[application/executor/requirement.go](../../application/executor/requirement.go):
 
-### 4.1 Provider & Store interfaces (consumer-side)
-
-`Provider` (`provider.go`) and `Store` (`store_contract.go`) live **in** the
-`executor` package, not in the implementation packages. This keeps imports
-one-directional and avoids cycles:
-
-```
-executor ─────────────┐
-  ▲                   │
-source/github         │
-source/local  ────────┴──▶ executor   (providers import executor.Package)
-executor/store ─────────────────────▶ executor   (store imports executor types)
+```go
+Requirement{
+    Type:       "github:read",      // logical executor name
+    Version:    "^1.0.0",           // "" | "1.2.0" | "^1.0.0" | "~1.5.0" | ">=2.0.0"
+    Registries: []string{"github"}, // optional; falls back to configured defaults
+}
 ```
 
-`Provider` contract: `Name()`, `Types(ctx)`, `Versions(ctx, typ)`,
-`Package(ctx, typ, version)`.
+A logical name is a `:`-separated path. The first segment is always the owner and
+at least one functional segment must follow, so `github:read` is valid and
+`Muhammad-Jay:github:read` is valid. Two projections matter downstream:
+`ToGitHubRepo()` hyphen-joins the trailing segments for the `owner/repo` GitHub
+form (`Muhammad-Jay/github-read`), and `ToLocalPath()` slash-joins them for the
+store layout (`Muhammad-Jay/github/read`). `NormalizeType` and `TypePath`
+round-trip a name to and from these forms.
 
-`Store` contract: `Root()`, `Stage()`, `Commit(ctx, stage, typ, version)`,
-`Get(ctx, typ, version)`, `List(ctx, typ)`, `Remove(ctx, typ, version)`.
+## Resolution and installation
 
-### 4.2 Registry catalog (`registry.go`)
+[application/executor](../../application/executor) owns the pipeline. Its public contracts — the `Provider`
+interface and the `Store` interface — are declared in `provider.go` and
+`store_contract.go` inside this package, so providers and stores import the
+executor package and never the reverse.
 
-`Registry` is the set of configured `Provider`s keyed by name. `Get(name)`
-returns a provider or `ErrRegistryNotConfigured` when the requirement names one
-that is not configured. It is *not* the installed catalog; resolve vs. install
-are separate.
+A `Registry` (`registry.go`) is the set of configured providers keyed by name.
+It answers "which provider serves this registry name"; it is not the catalog of
+installed versions.
 
-### 4.3 Resolver (`resolver.go`)
+The `Resolver` (`resolver.go`) turns a requirement into an installed executor.
+Resolution order matters:
 
-Turns a `Requirement` into an `Installed`. Resolution order:
+1. An exact pin that is already installed short-circuits everything.
+2. A constrained requirement satisfied by an installed version uses that
+   version without touching the network.
+3. A floating requirement (empty version) always goes to the registries, so
+   "latest" is defined by the registry and never stale-locked by whatever
+   happens to be installed.
+4. Otherwise the resolver walks the requirement's registries, asks each for its
+   versions, picks one with `SelectVersion` (`selector.go`), and installs it.
 
-1. **Exact pin already installed** → `store.Get(type, version)`.
-2. **Constrained requirement satisfied by an installed version** → best
-   installed version matching the constraint (no network).
-3. **Floating (`version == ""`) requirements always go to the registries** —
-   "latest" is defined by the registry, not by whatever happens to be
-   installed. (A floating check would stale-lock upgrades.)
-4. **Registry loop**: for each registry in `req.Registries`, ask `Versions`,
-   pick with `SelectVersion`, fetch `Package`, install.
+Version selection is always owned by the resolver, never trusted to a provider:
+empty constraints pick the newest valid semantic version, and `^`, `~`, and
+range constraints are evaluated with `Masterminds/semver`.
 
-`ResolveMany` dedupes by type and returns an `Environment` (the frozen set an
-Instance consumes).
+The `Installer` (`installer.go`) performs atomic installs. Everything happens in
+a staging directory inside the store: the artifact is downloaded
+(`download.go`), materialized (directories or tarballs, see `archive.go` for the
+gzip sniffing and path-escape checks), verified against its SHA-256
+(`verifier.go`, mandatory whenever a digest is declared), the authoritative
+manifest is written from the package rather than trusted from the payload, and
+finally the staging directory is renamed into the final version directory. An
+`install.json` audit record is rewritten with the final paths after the commit.
 
-`installedSatisfying` implements steps 1–3. Exact pins short-circuit the
-registry entirely (offline-safe).
-
-### 4.4 Version selection (`selector.go`)
-
-Always performed by the resolver, never trusted to a provider:
-
-- Empty constraint → newest **valid semver** (invalid entries ignored).
-- Constraint (`^`, `~`, ranges) → newest version satisfying it, via
-  `github.com/Masterminds/semver/v3`.
-- `IsExactVersion("1.2.0")` distinguishes a pin from a constraint/floating.
-
-### 4.5 Installer (`installer.go`) — atomic install
-
-```
-Store.Stage()                → <root>/.tmp-<rand>/   (inside the store)
-download artifact → dst      → materialize (extract/copy/place binary)
-verify SHA-256                → mandatory when expected digest present for single files
-write authoritative executor.json (from pkg.Manifest; never trust the payload copy)
-resolve entrypoint            → from manifest, falling back to artifact file name
-write install.json            → RecordFor(installed) with STAGING paths
-Store.Commit(stage, type, v)  → atomic os.Rename(stage → final dir)
-                               + rewrite install.json with FINAL paths
-```
-
-`AlreadyPresent` is idempotent: if the exact version is already in the store,
-no download occurs. `InstallResult{Installed, AlreadyPresent}`. A nil
-Downloader, missing artifact, or checksum mismatch fails the whole install;
-a partially materialized staging dir is removed by `defer`.
-
-### 4.6 Downloader (`download.go`)
-
-`Downloader` interface + default `HTTPDownloader` supporting `http(s)://` and
-`file:` (or bare path) schemes. Directories are copied recursively; remote
-resources streamed to disk (5-minute client timeout).
-
-### 4.7 Archive extraction (`archive.go`)
-
-`IsArchive` sniffs the gzip magic `1f 8b`. `ExtractTarGz` strips a single shared
-top-level directory (the common `<name>-v1.2.0/` release layout) and rejects
-paths escaping the destination (`inside` check).
-
-### 4.8 Verification (`verifier.go`)
-
-`VerifySHA256(path, expected)` accepts `sha256:<hex>` or bare hex; empty
-expected digest is a hard error (**never silently skip**). `DigestFile(path)`
-returns `sha256:<hex>`.
-
-### 4.9 Store layout (`executor/store/filesystem.go`)
+The store layout ([application/executor/store/filesystem.go](../../application/executor/store/filesystem.go)) is:
 
 ```
-~/.neuron/executors/
-└── <owner>/<...segments>/<version>/
-    ├── executor.json      # authoritative manifest
-    ├── install.json       # InstallRecord (audit trail)
-    └── <artifact…>        # binary, extracted payload, or pre-extracted dir
+~/.neuron/executors/<owner>/<...segments>/<version>/
+    executor.json      # authoritative manifest
+    install.json       # install audit record
+    <artifact...>      # binary, extracted payload, or directory
 ```
 
-`InstallRecord` (`installed_record.go`): `type/version/digest/registry/platform/
-rootDir/manifestPath/artifactPath/runtime/capabilities/services/installedAt`.
-`RecordFor` preserves the runtime contract needed to launch later.
-`Commit` renames the staging dir into the final version dir and *rewrites*
-`install.json` with the final paths (the staging copy would otherwise record a
-stale `.tmp-*` path). `List` supports an empty type (walk-all) and a specific
-type; newest-first ordering.
+## Registries
 
----
+The `local` registry ([application/executor/source/local/registry.go](../../application/executor/source/local/registry.go)) is a
+directory-backed registry used for offline testing and demos. Its layout mirrors
+the store minus the install record. It binds the host-platform artifact from the
+manifest as a `file://` URL and is the registry exercised by the integration
+tests and the example executors.
 
-## 5. Registries (providers)
+The `github` registry ([application/executor/source/github/](../../application/executor/source/github/)) talks to the
+GitHub Releases REST API with a minimal client in `client.go` — no SDK. The
+repository for a type comes from the convention in `registry.go`
+(`owner/hyphen-joined`) or from an explicit catalog override. Version discovery
+prefers stable tags and falls back to prereleases only when no stable release
+exists. The manifest is fetched from a release asset named `executor.json`, or
+from the raw file at the release tag, and its `metadata.version` must equal the
+release version. Artifacts are bound from release assets, falling back to the
+`download` URL. Optionally a token (`NEURON_GITHUB_TOKEN` or `WithToken`) raises
+the rate limits.
 
-### 5.1 `local` (`source/local/registry.go`)
+## Configuration
 
-A directory-backed registry used for offline testing and demos. Layout mirrors
-the store minus `install.json`:
-
-```
-<root>/github/read/1.2.0/
-    executor.json
-    github-read-linux-amd64   # optional artifact
-```
-
-`New(root)` errors with `ErrNotFound` if the root is missing. `Package` binds
-the host-platform (`GOOS-GOARCH`) artifact as a `file://` URL. This is the
-registry exercised by the integration tests.
-
-### 5.2 `github` (`source/github/`)
-
-Backed by the GitHub Releases REST API (minimal client, no SDK).
-
-- **Repository derivation:** `repoFor(type)` uses the catalog override if
-  present (`WithCatalog(map[type]RepoRef)`), else the convention
-  `owner/segments-hyphen-joined` from `ParseType`.
-- **Versions:** `ListReleases(owner, repo)` per_page=100, drafts excluded.
-  `versionsFromReleases` prefers stable tags, falls back to prereleases only
-  when no stable release exists (floating requirements never silently grab
-  alphas); leading `v` stripped.
-- **Manifest fetch precedence** (`fetchManifest`): a release *asset* named
-  `executor.json`, else the raw repository file at the release tag
-  (`raw.githubusercontent.com/<owner>/<repo>/<tag>/executor.json`).
-- **Version consistency:** the manifest's `metadata.version` must equal the
-  release version — otherwise the package is rejected.
-- **Artifact binding:** the release asset whose name matches the manifest's
-  host-platform entry (with `BrowserDownloadURL`), falling back to the raw
-  download URL (`github.com/.../releases/download/<tag>/<asset>`). The manifest
-  is authoritative for the artifact name.
-- **Auth:** optional token (`WithToken`, or `NEURON_GITHUB_TOKEN` via the
-  wiring layer) for higher rate limits / private repos.
-- **Types:** catalog-driven (only explicitly configured types `GitHub` reports;
-  never guesses at conventions, to avoid surprising 404s).
-
----
-
-## 6. Runtime (`application/executor/runtime`)
-
-The boundary N.O.R.E. sees: `Executor.Execute(req) → resp`. It never knows
-about registries or downloads.
-
-- `Executor` interface: `Type()`, `Version()`, `Execute(ctx, *shadexec.Request)`.
-- `Factory(ctx, installed) → (Executor, error)` — one per runtime **kind**.
-- `Runtime` dispatches `Materialize` by `installed.Runtime.Type`.
-  `DefaultRuntime()` registers the built-in `process` kind.
-- `ProcessExecutor` (`process.go`): spawns the installed entrypoint **per
-  execution**, writes the JSON Request to stdin, reads the JSON Response from
-  stdout, injects the three env vars, honors the context deadline. Checks the
-  entrypoint exists and is executable before launch.
-
-Future kinds (`wasm`, `container`, `remote`) register the same Factory contract.
-
----
-
-## 7. Configuration
-
-`application/config` `ExecutorsConfig` block:
+The `executors` block in [application/config](../../application/config) controls everything:
 
 ```yaml
 executors:
@@ -329,198 +232,156 @@ executors:
   defaultRegistries: []                  # optional fallback list
 ```
 
-Build defaults register `github` + `local`. `storeDir` is path-expanded by the
-loader. The `github` URL is the API base; the `local` URL is the local registry
-root when it is not `local://`.
+Build defaults register `github` and `local`. A requirement that names no
+registry (or a blank one) falls back to `defaultRegistries` instead of failing,
+thanks to the normalization in [application/internal/executorctl/executorctl.go](../../application/internal/executorctl/executorctl.go).
+`executorctl.BuildCatalog` assembles the store, the providers, the installer,
+and the resolver from this configuration and exposes `Require`, `Resolve`,
+`Install`, `List`, `Inspect`, and `Remove`.
 
----
+## Register: from project to Deployment
 
-## 8. Wiring (`application/internal/executorctl`)
+`neuron register` is the single entry point for shipping a project to the
+platform, defined in [application/internal/cli/register/register.go](../../application/internal/cli/register/register.go). It no
+longer assumes a prior `neuron build`; building and registering are one step.
 
-`executorctl.BuildCatalog(CatalogConfig)` assembles the pipeline from config:
+The command takes `--lang` (`yaml`, `yml`, `typescript`, `ts`) and `--root` for
+the project directory, defaulting to the current directory. The effective
+language comes from the flag or from the `lang` field in the project
+configuration, resolved by `language.Resolve`. The root flag also guides
+configuration discovery in [application/internal/cli/cli.go](../../application/internal/cli/cli.go) (`loadConfig`),
+which searches for `neuron.yaml`, `neuron.yml`, `neuron.config.yaml`,
+`neuron.config.yml`, and `neuron.config.json` beneath it.
 
-- `store.NewFilesystemStore(storeDir)` (default `~/.neuron/executors`).
-- A fresh `executor.Registry`; for each configured registry:
-  - `github` → `github.New(WithToken(token))` (+ optional catalog override).
-    Token falls back to `NEURON_GITHUB_TOKEN`.
-  - `local` → `local.New(url)`.
-  - Unknown names are tolerated at build time and fail at resolve time.
-- `Installer{Store, Downloader: NewHTTPDownloader()}`,
-  `Resolver(reg, store, installer)`.
+With the language and root resolved, the handler:
 
-Exposed operations: `Require(type, version, registries)`, `Resolve`, `Install`,
-`List`, `Inspect`, `Remove`.
+1. Builds the project into `.neuron/manifest.json` through
+   `build.Build`, dispatching to the registered builder for the language.
+2. Compiles the manifest to a `core.System` and computes the instance key with
+   [application/compiler](../../application/compiler).
+3. Resolves every executor requirement the manifest declares through the wired
+   catalog, installing anything missing, and freezes the exact results into
+   `ExecutionConfigurations.ResolvedExecutors`.
+4. Sends a `RegisterRequest` to N.O.R.E., saves the returned registration key
+   into the project, and prints the `system@version#hash:env` line.
 
-`Require` normalizes the registry list first (`nonEmptyRegistries` drops empty /
-whitespace-only names). Only when the resulting list is empty does it fall back
-to `cfg.DefaultRegistries`. This means a requirement that declares **no** (or a
-blank) registry resolves against the configured defaults instead of failing on
-an empty registry name.
+`resolveFrozenExecutors` is where a requirement becomes the frozen wire record:
+each `manifest.ExecutorRequirement` becomes an `executor.Requirement`, the
+catalog resolves them all into an `Environment`, and each installed executor is
+turned into a `ResolvedExecutor` with the requested version pinned next to the
+resolved one.
 
----
+The CLI also ships dedicated `neuron executor` subcommands
+([application/internal/cli/executor/](../../application/internal/cli/executor/)) for working with the local store
+directly: `install`, `list`, `inspect`, and `remove`.
 
-## 9. CLI commands (`application/internal/cli/executor`)
+## Execution inside N.O.R.E.
 
-`neuron executor <subcommand>` registers into the root CLI. References are
-`name@version` — version is optional.
+On the N.O.R.E. side, [nore/internal/plugin](../../nore/internal/plugin) adapts frozen executors to the
+in-process `contracts.Executor` contract. `RegisterResolvedExecutors` in
+`process.go` registers an adapter for every frozen type that does not already
+have a core executor — built-ins win, external types become adapters. The
+dispatch in `NewAdapter` reads the runtime kind and builds the matching
+adapter: `process`, `wasm`, or an explicit rejection for anything else.
 
-| Command | Behavior |
-| --- | --- |
-| `neuron executor install github:read@^1.0.0` | Resolve (registry, installed-first for pins/constraints) and install; prints `installed <type>@<version> (from <registry>)`. |
-| `neuron executor list [-t <type>]` | Lists installed executors (all or filtered) newest-first. |
-| `neuron executor inspect github:read` | `name@version` or newest installed for the type; prints record + runtime + capabilities/services. |
-| `neuron executor remove github:read@1.2.0` | Removes one installed version (**version required** — immutable artifacts are deleted whole). |
+Instances never resolve or install. When `Manager.GetOrCreate` builds an
+Instance ([nore/internal/instance/](../../nore/internal/instance/)), it decodes the opaque
+`ExecutionConfigurations` payload into `[]ResolvedExecutor`, registers the core
+executors, and then the frozen adapters. Execution of a non-core service
+dispatches to its adapter.
 
-Each command loads the effective config from the command context
-(`config.FromContext`) and builds the catalog on demand. No daemon required.
+### The process adapter
 
----
+`ProcessAdapter` (`process.go`) spawns the frozen entrypoint as a child process
+per execution, feeds the JSON request to stdin, collects stdout and stderr, and
+honors the context deadline — a timed-out execution is killed and reported. It
+is the reference implementation of the protocol.
 
-## 10. `neuron register` — end-to-end
+### The Wasm adapter
 
-`application/internal/cli/register/register.go`. Sequence:
+`WasmAdapter` (`wasm.go`) runs a frozen `.wasm` module inside the embedded
+wazero runtime. It speaks the exact same protocol: JSON request on stdin, JSON
+response on stdout, and the three `NEURON_EXECUTOR_*` environment variables, all
+provided through the module configuration. An executor author therefore compiles
+once to a native binary and once to a `wasm32-wasi` module, and nothing about
+the protocol changes.
 
-```
-load config ──▶ bootstrap.SetupClient ──▶ manifest.LoadFromProjectRoot (neuron build output)
-     │                                          │
-     │                                          ▼
-     │                                   compiler.Compile(m) → core.System
-     │                                          ▼
-     │                                   compiler.InstanceKey(m) → protocol.InstanceKey
-     │                                          ▼
-     │                                   configs = compiler.BuildExecutionConfigurations(m)
-     │                                          ▼
-     └─▶ resolveFrozenExecutors(ctx, cfg, configs.ExecutorRequirements)
-                │
-                ├─ executorctl.BuildCatalog
-                ├─ catalog.Require(name, version, registries) per requirement
-                │   (an empty manifest registry passes no registry, so
-                │    catalog.Require falls back to defaultRegistries)
-                ├─ catalog.Resolve → executor.Environment   (installs anything missing)
-                └─ installed.Frozen(requested[type]) per executor → []ResolvedExecutor
-                    (requested version keyed by type, not by list index — ResolveMany
-                     dedupes; Environment.Resolved() is the equivalent helper in model.go)
-                          │
-                          ▼
-              configs.ResolvedExecutors = frozen  (JSON: "resolved_executors")
-                          │
-                          ▼
-        protocol.RegisterRequest{Key, System, ExecutionConfigurations: configs}
-                          │
-                          ▼
-        client.Register ──▶ project.SaveRegistrationKey ──▶ print
-```
+Two properties matter for how Wasm executors behave at scale.
 
-What register **requires**: `neuron build` must have produced
-`.neuron/manifest.json`. What register **does**: compiles the manifest to a
-System, resolves every executor requirement through the wired catalog (so it
-is *installed locally*), freezes the exact resolutions into the payload, and
-sends it to N.O.R.E.
+The wazero runtime is created once per process and shared by every instance.
+The same is true of compiled modules: each distinct frozen module file is
+compiled into a `wazero.CompiledModule` exactly once, cached in memory keyed by
+its entrypoint path, and reused by every subsequent execution and every other
+instance that references the same file. If an Instance declares several `.wasm`
+modules, they are all compiled and all cached independently — the cache holds
+one compiled module per distinct module file, not one module for the whole
+process. This is verified by the plugin integration tests, which register
+multiple distinct modules against the same runtime.
 
-### 10.1 N.O.R.E. side (`nore/internal/plugin`, `nore/internal/instance`)
+Each execution instantiates a fresh, sandboxed module from the shared compiled
+module with its own stdin and stdout buffers, runs `_start`, and tears the
+module down. Executions do not serialize: instantiating from a compiled module
+is safe to do concurrently, so parallel requests run in parallel sandboxes.
 
-`RegisteredSystem.ExecutionConfigurations` is stored **opaquely** (`any`) so
-N.O.R.E. never depends on `application/compiler`. When an Instance is created
-(`Manager.GetOrCreate`):
+Runaway modules are handled by construction. The runtime is configured with
+`WithCloseOnContextDone`, which makes wazero insert periodic checks, so an
+in-flight `_start` is interrupted when its execution context reaches its
+deadline and the module is closed automatically. A module that loops forever
+cannot leak a goroutine or block the process.
 
-1. `plugin.DecodeResolvedExecutors(payload)` JSON-round-trips the opaque payload
-   into `[]shadexec.ResolvedExecutor` (works for both typed values in-process
-   and `map[string]any` re-read from disk). A malformed payload now **fails
-   `GetOrCreate`** (`withExecutors` returns the error up) instead of being
-   logged and silently skipped.
-2. `registry.RegisterCoreServiceExecutors()` registers the 6 in-process
-   executors first.
-3. `plugin.RegisterProcessExecutors(reg, resolved)` registers a
-   `ProcessAdapter` for every frozen type that has **no** existing executor —
-   core executors win; external types become subprocesses.
-4. `Instance.New(..., WithResolvedExecutors(resolved))` builds the runtime;
-   executions of non-core services dispatch to the `ProcessAdapter`, which
-   spawns the frozen entrypoint, feeds `execution.Input` as the protocol
-   Request, and surfaces `Response.Output` (or `Response.Error`).
+### Lifecycle
 
-Instances therefore never resolve or install anything — resolution happens at
-**register** time and is frozen in the Deployment.
+`contracts.ExecutorCloser` in [nore/internal/contracts/executor.go](../../nore/internal/contracts/executor.go) lets an
+adapter release resources. Adapters are registered into a `Registry`
+([nore/internal/registry/executor-registry.go](../../nore/internal/registry/executor-registry.go)), and `Instance.Stop` closes the
+registry after in-flight work drains. The Wasm adapter's `Close` is a no-op by
+design: it does not own the runtime or its compiled modules, so closing one
+adapter never tears down resources other instances still need. The runtime and
+compiled modules live for the life of the process.
 
----
+## The example executor
 
-## 11. Error taxonomy (`errors.go`)
+[examples/executors/echo](../../examples/executors/echo) is a stdlib-only Go module that implements the
+protocol: it reads the request, echoes the input back, and reflects the three
+`NEURON_EXECUTOR_*` environment variables into the output. A controlled error is
+produced when the input contains an `error` field, which exercises the
+non-zero/`error` response path without a crash.
 
-| Sentinel | Meaning | Retry? |
-| --- | --- | --- |
-| `ErrNotFound` | Executor cannot be located | try next registry |
-| `ErrRegistryNotConfigured` | Requirement names an unconfigured registry | no |
-| `ErrChecksumMismatch` | SHA-256 verification failed | pointless / dangerous |
-| `ErrNoVersionSatisfies` | No available version meets the constraint | no |
-| `ErrManifestInvalid` | `executor.json` failed to parse/validate | no |
-| `ErrAlreadyInstalled` | Exact version already in the store | idempotent success |
+[examples/executors/build.sh](../../examples/executors/build.sh) compiles that single source twice into the catalog
+layout a local registry expects: a native binary for the `process` runtime and a
+`wasm32-wasi` module for the `wasm` runtime, each with its own `executor.json`.
+The generated catalog is gitignored; rerun the script after changing the source.
 
-`NotFoundError{Type,Version}` wraps not-founds with context.
+## Extending
 
----
+Add a registry provider by implementing `Provider` (`Name`, `Types`, `Versions`,
+`Package`) and registering it in `executorctl.BuildCatalog`. Distribution
+conventions are the installer's materialize rules.
 
-## 12. Design decisions (why it is this way)
+Add an authoring language by implementing `builder.Builder` and registering it
+in the build package. The CLI, the compiler, and the runtime are untouched.
 
-1. **Provider & Store contracts live consumer-side** in `executor` to keep
-   imports acyclic. Providers and stores import `executor`; `executor` imports
-   neither.
-2. **Instances never resolve/install.** Resolution is frozen at register time;
-   restarting a Deployment reuses the pinned artifacts.
-3. **Floating requirements always consult the registry.** Installed-first only
-   applies to pins and explicit constraints, so "latest" is never stale-locked.
-4. **Version selection is resolver-owned**, not provider-owned — a provider's
-   ordering is never trusted.
-5. **Checksum verification is mandatory** when a digest is declared; an
-   expected digest is never bypassed.
-6. **Atomic installs**: everything happens in a staging dir inside the store;
-   a version only becomes visible via a final rename, and `install.json` is
-   rewritten with final paths.
-7. **Core executors win** over frozen external artifacts for the same service
-   type (built-in first, subprocess fallback).
-8. **N.O.R.E. is decoupled from the registry code** — it only knows the shared
-   wire types.
+Add a runtime kind by implementing a launch path in [nore/internal/plugin](../../nore/internal/plugin) and
+accepting it in `NewAdapter`; the kind constants already exist in
+[shared/types/executor/runtime.go](../../shared/types/executor/runtime.go). The protocol does not change.
 
----
+Add a core in-process executor by registering it in
+[`nore/internal/registry.RegisterCoreServiceExecutors`](../../nore/internal/registry/executor-registry.go) before the plugin pass; it
+will shadow any frozen external executor for the same service type.
 
-## 13. Extending
+## Testing
 
-**Add a registry provider**: implement `executor.Provider` (`Name`, `Types`,
-`Versions`, `Package`), then register it in `executorctl.BuildCatalog`
-(or the config → provider switch). A `.tar.gz`/binary distribution convention
-should follow the installer's materialize rules.
+The unit tests cover the stable inner contracts: requirement naming and
+validation, version selection, SHA-256 verification, and the local-registry
+pipeline that walks resolve, install, store, and freeze in a temp directory.
 
-**Add a runtime kind**: implement a `runtime.Factory` and register it on the
-`Runtime` (e.g. `wasm`, `container`). The manifest's `runtime.type` selects it.
+The plugin integration tests ([nore/internal/plugin/plugin_integration_test.go](../../nore/internal/plugin/plugin_integration_test.go))
+build the echo and spin fixtures once per test binary and verify the full
+adapter surface: process and Wasm round-trips with environment capture,
+controlled errors, missing entrypoint and module failures, the timeout path
+against a module that never returns, concurrent executions against the shared
+Wasm runtime, the compiled-module cache across distinct modules, and that an
+adapter close does not hurt the shared runtime.
 
-**Add a core (in-process) executor**: register it in
-`nore/internal/registry.RegisterCoreServiceExecutors` *before* the plugin pass;
-it will shadow any frozen external executor for that service type.
-
----
-
-## 14. Testing
-
-- Unit: `requirement_test.go` (naming/parse/validate), `selector_test.go`
-  (constraints, exact, latest, non-semver safety), `verifier_test.go`
-  (SHA-256 formats).
-- Integration: `pipeline_test.go` builds local-registry packages in a temp dir
-  and runs the full resolve → install → store → frozen-record round trip.
-- Config: `loader_test.go` asserts the default registries.
-- Run: `go test ./application/...` (and `./nore/...`, `./shared/...`).
-
----
-
-## 15. File map
-
-| Area | Files |
-| --- | --- |
-| Wire contract | `shared/types/executor/{manifest,protocol,resolved}.go` |
-| Core machinery | `application/executor/{requirement,model,errors,selector,registry,resolver,installer,verifier,manifest,archive,download,installed_record,provider,store_contract}.go` |
-| Store | `application/executor/store/{store,filesystem}.go` |
-| Registries | `application/executor/source/local/registry.go`, `application/executor/source/github/{client,registry,releases,package}.go` |
-| Runtime | `application/executor/runtime/{executor,process}.go` |
-| Wiring | `application/internal/executorctl/executorctl.go` |
-| CLI | `application/internal/cli/executor/{executor,print}.go` |
-| Register flow | `application/internal/cli/register/register.go` |
-| Config | `application/config/{config,defaults,loader}.go`, `application/compiler/config.go` |
-| N.O.R.E. adapter | `nore/internal/plugin/process.go`, `nore/internal/instance/{instance,manager}.go` |
-| Tests | `application/executor/*_test.go` |
+Run them with `go test ./application/... ./nore/... ./shared/...` from the
+repository root, or use [scripts/script.sh](../../scripts/script.sh) for the full workspace build.
