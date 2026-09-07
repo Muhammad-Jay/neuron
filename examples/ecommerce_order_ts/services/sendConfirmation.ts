@@ -6,6 +6,6 @@ export const sendConfirmation = Service({
   version: "1.0.0",
   description: "Send order confirmation email",
 })
-  .executor({ name: "set" })
+  .executor({ name: "neuron:core:set" })
   .inputSchema<SendConfirmationInput>()
   .outputSchema<SendConfirmationOutput>();

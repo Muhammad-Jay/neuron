@@ -15,7 +15,15 @@ import type { SystemInput } from "./types.js";
  * Builds the order-processing pipeline from the system input.
  *
  * `SystemInput` (execution context) is passed in as `input`, so the original
- * order can be bound to the very first service in the chain.
+ * order is reachable from any step via `input.order` (compiled to
+ * `execution.input.order`). Each service also forwards the order through its
+ * own output, so in-flight maps read it back from the previous step's output
+ * (`source.output.order`).
+ *
+ * Every executor is `neuron:core:set`, which echoes the service input (plus
+ * config), so a service only outputs the data its input carried. Bindings are
+ * therefore kept to fields the previous step actually emits, and gateway
+ * conditions test order data rather than domain objects no mock step produces.
  */
 export function buildPipeline(input: Expressionify<{ order: SystemInput["order"] }>) {
   return validateOrder
@@ -24,55 +32,57 @@ export function buildPipeline(input: Expressionify<{ order: SystemInput["order"]
     })
     .next(
       parseOrder.withInput({
+        order: validateOrder.output.order,
         validationData: validateOrder.output,
       })
     )
     .next(
       enrichCustomer.withInput({
+        order: parseOrder.output.order,
         customerId: parseOrder.output.order.customerId,
       })
     )
     .next(
       calculateTotals.withInput({
+        order: parseOrder.output.order,
         items: parseOrder.output.order.items,
-        customerTier: enrichCustomer.output.customerData.tier,
-        shippingState: enrichCustomer.output.customerData.shippingAddress.state,
-        email: enrichCustomer.output.customerData.email,
+        email: parseOrder.output.order.customerEmail,
       })
     )
     .next(
       authorizePayment.withInput({
+        order: parseOrder.output.order,
         amountCents: parseOrder.output.order.total,
         currency: parseOrder.output.order.currency,
-        email: enrichCustomer.output.customerData.email,
+        email: parseOrder.output.order.customerEmail,
       })
     )
     .next(
       capturePayment.withInput({
-        paymentIntentId: authorizePayment.output.paymentIntent.id,
+        order: authorizePayment.output.order,
+        amountCents: authorizePayment.output.amountCents,
       }),
       {
-        when: authorizePayment.output.paymentIntent.status.equals("requires_capture"),
+        when: authorizePayment.output.amountCents.greaterThanOrEqualTo(1000),
         message: "Payment not authorized",
       }
     )
     .next(
       createShipment.withInput({
-        order: parseOrder.output.order,
-        shippingAddress: parseOrder.output.order.shippingAddress,
-        email: enrichCustomer.output.customerData.email,
+        order: input.order,
+        shippingAddress: input.order.shippingAddress,
+        email: input.order.customerEmail,
       }),
       {
-        when: capturePayment.output.captureResult.status.equals("succeeded"),
+        when: capturePayment.output.amountCents.greaterThanOrEqualTo(1000),
         message: "Payment capture failed",
       }
     )
     .next(
       sendConfirmation.withInput({
-        trackingNumber: createShipment.output.shipment.trackingNumber,
-        carrier: createShipment.output.shipment.carrier,
-        email: enrichCustomer.output.customerData.email,
-        grandTotal: parseOrder.output.order.total,
+        order: createShipment.output.order,
+        email: createShipment.output.email,
+        grandTotal: createShipment.output.order.total,
       })
     );
 }

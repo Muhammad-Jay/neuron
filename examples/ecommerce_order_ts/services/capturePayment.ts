@@ -6,6 +6,6 @@ export const capturePayment = Service({
   version: "1.0.0",
   description: "Capture an authorized payment",
 })
-  .executor({ name: "set" })
+  .executor({ name: "neuron:core:set" })
   .inputSchema<CapturePaymentInput>()
   .outputSchema<CapturePaymentOutput>();

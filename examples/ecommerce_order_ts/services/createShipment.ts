@@ -6,6 +6,6 @@ export const createShipment = Service({
   version: "1.0.0",
   description: "Create a shipment for the order",
 })
-  .executor({ name: "set" })
+  .executor({ name: "neuron:core:set" })
   .inputSchema<CreateShipmentInput>()
   .outputSchema<CreateShipmentOutput>();

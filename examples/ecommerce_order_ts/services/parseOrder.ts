@@ -6,6 +6,6 @@ export const parseOrder = Service({
   version: "1.0.0",
   description: "Parse and normalize order data",
 })
-  .executor({ name: "set" })
+  .executor({ name: "neuron:core:set" })
   .inputSchema<ParseOrderInput>()
   .outputSchema<ParseOrderOutput>();

@@ -31,69 +31,63 @@ export interface ValidateOrderInput {
 }
 
 export interface ValidateOrderOutput {
-  valid: boolean;
-  status: string;
   order: OrderInput;
 }
 
 export interface ParseOrderInput {
+  order: OrderInput;
   validationData: unknown;
 }
 
 export interface ParseOrderOutput {
   order: OrderInput;
+  validationData: unknown;
 }
 
 export interface EnrichCustomerInput {
+  order: OrderInput;
   customerId: string;
 }
 
 export interface EnrichCustomerOutput {
-  customerData: {
-    tier: string;
-    email: string;
-    shippingAddress: Address;
-  };
   order: OrderInput;
+  customerId: string;
 }
 
 export interface CalculateTotalsInput {
+  order: OrderInput;
   items: OrderItem[];
-  customerTier: string;
-  shippingState: string;
   email: string;
 }
 
 export interface CalculateTotalsOutput {
-  totalCents: number;
-  taxCents: number;
   order: OrderInput;
+  items: OrderItem[];
+  email: string;
 }
 
 export interface AuthorizePaymentInput {
+  order: OrderInput;
   amountCents: number;
   currency: string;
   email: string;
 }
 
 export interface AuthorizePaymentOutput {
-  paymentIntent: {
-    id: string;
-    status: string;
-  };
   order: OrderInput;
+  amountCents: number;
+  currency: string;
+  email: string;
 }
 
 export interface CapturePaymentInput {
-  paymentIntentId: string;
+  order: OrderInput;
+  amountCents: number;
 }
 
 export interface CapturePaymentOutput {
-  captureResult: {
-    status: string;
-    amountReceived: number;
-  };
   order: OrderInput;
+  amountCents: number;
 }
 
 export interface CreateShipmentInput {
@@ -103,22 +97,19 @@ export interface CreateShipmentInput {
 }
 
 export interface CreateShipmentOutput {
-  shipment: {
-    trackingNumber: string;
-    carrier: string;
-    labelUrl: string;
-  };
   order: OrderInput;
+  shippingAddress: Address;
+  email: string;
 }
 
 export interface SendConfirmationInput {
-  trackingNumber: string;
-  carrier: string;
+  order: OrderInput;
   email: string;
   grandTotal: number;
 }
 
 export interface SendConfirmationOutput {
-  confirmationSent: boolean;
-  messageId: string;
+  order: OrderInput;
+  email: string;
+  grandTotal: number;
 }

@@ -8,7 +8,7 @@ metadata:
 
 spec:
   executor:
-    type: set
+    type: neuron:core:set
 
   config:
     capture_result:

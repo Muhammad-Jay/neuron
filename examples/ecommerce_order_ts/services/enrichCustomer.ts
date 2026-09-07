@@ -6,6 +6,6 @@ export const enrichCustomer = Service({
   version: "1.0.0",
   description: "Enrich with customer data",
 })
-  .executor({ name: "set" })
+  .executor({ name: "neuron:core:set" })
   .inputSchema<EnrichCustomerInput>()
   .outputSchema<EnrichCustomerOutput>();

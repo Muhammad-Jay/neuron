@@ -4,7 +4,7 @@ import type { SystemInput } from "./types.js";
 
 const manifest = System({
   name: "order-processing-ts",
-  version: "2.0.0",
+  version: "2.1.0",
   description: "Order processing pipeline",
 })
   .inputSchema<SystemInput>()

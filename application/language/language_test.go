@@ -2,6 +2,8 @@ package language_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Muhammad-Jay/neuron/application/language"
@@ -37,7 +39,7 @@ func TestNormalizeUnknown(t *testing.T) {
 }
 
 func TestResolveFlagWinsOverConfig(t *testing.T) {
-	got, err := language.Resolve("ts", "yaml")
+	got, err := language.Resolve("ts", "yaml", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +49,52 @@ func TestResolveFlagWinsOverConfig(t *testing.T) {
 }
 
 func TestResolveFallsBackToConfig(t *testing.T) {
-	got, err := language.Resolve("", "yml")
+	got, err := language.Resolve("", "yml", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != language.YAML {
+		t.Errorf("Resolve = %q, want yaml", got)
+	}
+}
+
+func TestResolveDetectsTypeScriptEntry(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.ts"), []byte("export {}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := language.Resolve("", "", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != language.TypeScript {
+		t.Errorf("Resolve = %q, want typescript", got)
+	}
+}
+
+func TestResolveDetectsNeuronConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "neuron.config.ts"), []byte("export {}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := language.Resolve("", "", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != language.TypeScript {
+		t.Errorf("Resolve = %q, want typescript", got)
+	}
+}
+
+func TestResolveFlagOverridesDetection(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.ts"), []byte("export {}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := language.Resolve("yaml", "", dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,13 +104,14 @@ func TestResolveFallsBackToConfig(t *testing.T) {
 }
 
 func TestResolveRequiresLanguage(t *testing.T) {
-	if _, err := language.Resolve("", ""); !errors.Is(err, language.ErrLanguageRequired) {
+	dir := t.TempDir()
+	if _, err := language.Resolve("", "", dir); !errors.Is(err, language.ErrLanguageRequired) {
 		t.Errorf("Resolve = %v, want ErrLanguageRequired", err)
 	}
 }
 
 func TestResolveInvalidFlag(t *testing.T) {
-	if _, err := language.Resolve("kotlin", "yaml"); !errors.Is(err, language.ErrLanguageUnknown) {
+	if _, err := language.Resolve("kotlin", "yaml", ""); !errors.Is(err, language.ErrLanguageUnknown) {
 		t.Errorf("Resolve = %v, want ErrLanguageUnknown", err)
 	}
 }

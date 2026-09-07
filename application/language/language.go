@@ -7,6 +7,8 @@ package language
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -62,14 +64,41 @@ func Normalize(s string) (Language, error) {
 }
 
 // Resolve determines the effective project language. The CLI flag wins;
-// otherwise the project configuration value is used. Neither present is an
-// error.
-func Resolve(flagValue, configValue string) (Language, error) {
+// otherwise the project configuration value is used, then a heuristic project
+// sniff for TypeScript. Neither present is an error.
+func Resolve(flagValue, configValue, projectDir string) (Language, error) {
 	if strings.TrimSpace(flagValue) != "" {
 		return Normalize(flagValue)
 	}
 	if strings.TrimSpace(configValue) != "" {
 		return Normalize(configValue)
 	}
+	if detected, ok := detectFromProjectDir(projectDir); ok {
+		return detected, nil
+	}
 	return "", ErrLanguageRequired
+}
+
+// detectFromProjectDir infers the authoring language from the project root.
+// A TypeScript project is recognized by the neuron-sdk config file
+// (neuron.config.ts/js/mjs) or a conventional index.ts entry point.
+func detectFromProjectDir(projectDir string) (Language, bool) {
+	if projectDir == "" {
+		return "", false
+	}
+
+	markers := []string{
+		"neuron.config.ts",
+		"neuron.config.js",
+		"neuron.config.mjs",
+		"index.ts",
+	}
+
+	for _, marker := range markers {
+		if info, err := os.Stat(filepath.Join(projectDir, marker)); err == nil && !info.IsDir() {
+			return TypeScript, true
+		}
+	}
+
+	return "", false
 }

@@ -6,6 +6,6 @@ export const calculateTotals = Service({
   version: "1.0.0",
   description: "Calculate order totals with tax and discounts",
 })
-  .executor({ name: "set" })
+  .executor({ name: "neuron:core:set" })
   .inputSchema<CalculateTotalsInput>()
   .outputSchema<CalculateTotalsOutput>();

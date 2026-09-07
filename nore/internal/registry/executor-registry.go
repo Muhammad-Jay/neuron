@@ -44,12 +44,22 @@ func (r *Registry) Resolve(serviceType core.ServiceType) (contracts.Executor, er
 }
 
 func (r *Registry) RegisterCoreServiceExecutors() {
-	must(r.Register("set", executors.SetExecutor{}))
-	must(r.Register("ai", executors.AIMockExecutor{}))
-	must(r.Register("log", executors.LogExecutor{}))
-	must(r.Register("http", executors.HttpExecutor{}))
-	must(r.Register("delay", executors.DelayExecutor{}))
-	must(r.Register("command", executors.CommandExecutor{}))
+	builtins := map[string]contracts.Executor{
+		"set":     executors.SetExecutor{},
+		"ai":      executors.AIMockExecutor{},
+		"log":     executors.LogExecutor{},
+		"http":    executors.HttpExecutor{},
+		"delay":   executors.DelayExecutor{},
+		"command": executors.CommandExecutor{},
+	}
+
+	// Register each in-process executor under its canonical namespaced name
+	// (neuron:core:set, ...) plus the legacy bare name so blueprints authored
+	// before the namespace existed still resolve.
+	for name, executor := range builtins {
+		must(r.Register(core.CoreName(name), executor))
+		must(r.Register(core.ServiceType(name), executor))
+	}
 }
 
 // Close releases resources held by registered executors that implement

@@ -6,6 +6,6 @@ export const authorizePayment = Service({
   version: "1.0.0",
   description: "Authorize payment for the order",
 })
-  .executor({ name: "set" })
+  .executor({ name: "neuron:core:set" })
   .inputSchema<AuthorizePaymentInput>()
   .outputSchema<AuthorizePaymentOutput>();

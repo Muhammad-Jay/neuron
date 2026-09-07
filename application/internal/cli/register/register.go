@@ -16,6 +16,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/application/internal/executorctl"
 	"github.com/Muhammad-Jay/neuron/application/language"
 	"github.com/Muhammad-Jay/neuron/application/project"
+	"github.com/Muhammad-Jay/neuron/shared/types/core"
 	shadexec "github.com/Muhammad-Jay/neuron/shared/types/executor"
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 	"github.com/spf13/cobra"
@@ -50,12 +51,12 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error {
 	langFlag, _ := cmd.Flags().GetString("lang")
 	rootFlag, _ := cmd.Flags().GetString("root")
 
-	lang, err := language.Resolve(langFlag, cfg.Lang)
+	root, err := resolveRoot(rootFlag)
 	if err != nil {
 		return err
 	}
 
-	root, err := resolveRoot(rootFlag)
+	lang, err := language.Resolve(langFlag, cfg.Lang, root)
 	if err != nil {
 		return err
 	}
@@ -174,6 +175,12 @@ func resolveFrozenExecutors(ctx context.Context, cfg config.Config, requirements
 
 	executorReqs := make([]executor.Requirement, 0, len(requirements))
 	for _, req := range requirements {
+		// Core executors (neuron:core:*) run in-process inside N.O.R.E. and
+		// the legacy bare core names too; there is nothing to resolve or
+		// install for them.
+		if core.IsCoreServiceType(core.ServiceType(req.Name)) {
+			continue
+		}
 		var registries []string
 		if req.Registry != "" {
 			registries = []string{req.Registry}

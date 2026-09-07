@@ -6,6 +6,6 @@ export const validateOrder = Service({
   version: "1.0.0",
   description: "Validate incoming order request",
 })
-  .executor({ name: "set" })
+  .executor({ name: "neuron:core:set" })
   .inputSchema<ValidateOrderInput>()
   .outputSchema<ValidateOrderOutput>();
