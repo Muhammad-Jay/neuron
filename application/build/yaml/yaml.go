@@ -47,7 +47,9 @@ func (b Builder) Build(ctx context.Context, opts builder.Options) error {
 	}
 
 	sys := manifest.FromResolvedProject(result.Project)
-	if err := manifest.SaveToProjectRoot(root, sys); err != nil {
+	// Canonicalize is identity for YAML-authored manifests but keeps the
+	// canonicalization invariant (snake_case connector keys) uniform.
+	if err := manifest.SaveToProjectRoot(root, manifest.Canonicalize(sys)); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 

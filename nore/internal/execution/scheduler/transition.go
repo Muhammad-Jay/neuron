@@ -7,6 +7,7 @@ import (
 	exec "github.com/Muhammad-Jay/neuron/nore/internal/execution"
 	"github.com/Muhammad-Jay/neuron/nore/internal/types"
 
+	"github.com/Muhammad-Jay/neuron/nore/internal/data"
 	"github.com/Muhammad-Jay/neuron/nore/internal/resolver"
 )
 
@@ -15,7 +16,7 @@ func buildTransitionEnvironment(execution *exec.Execution, sourceNode types.Exec
 	return resolver.Environment{
 		Source: map[string]any{
 			"id": string(service.Metadata.ID), "name": service.Metadata.Name, "type": string(service.Type),
-			"input": execution.Input(service.Metadata.ID), "output": cloneMap(output),
+			"input": data.SnakeMap(execution.Input(service.Metadata.ID)), "output": data.SnakeMap(output),
 			"metadata": map[string]any{
 				"id": string(service.Metadata.ID), "name": service.Metadata.Name,
 				"description": service.Metadata.Description, "version": service.Metadata.Version,
@@ -23,7 +24,7 @@ func buildTransitionEnvironment(execution *exec.Execution, sourceNode types.Exec
 		},
 		Execution: map[string]any{
 			"id": string(execution.ID), "correlation_id": string(execution.CorrelationID),
-			"input": execution.InitialInput(),
+			"input": data.SnakeMap(execution.InitialInput()),
 			"blueprint": map[string]any{
 				"id": string(execution.Blueprint.Metadata.ID), "name": execution.Blueprint.Metadata.Name,
 				"version": execution.Blueprint.Metadata.Version,

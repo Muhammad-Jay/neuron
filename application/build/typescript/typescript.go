@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/Muhammad-Jay/neuron/application/build/builder"
+	"github.com/Muhammad-Jay/neuron/application/compiler/manifest"
 	"github.com/Muhammad-Jay/neuron/application/language"
 	"github.com/Muhammad-Jay/neuron/application/loader"
 	"github.com/Muhammad-Jay/neuron/application/loader/typescript"
@@ -63,6 +64,17 @@ func (b Builder) Build(ctx context.Context, opts builder.Options) error {
 	tsLoader := typescript.NewTSLoader(cmd)
 	if err := loader.New(tsLoader).Handler.BuildContext(ctx); err != nil {
 		return fmt.Errorf("typescript build failed: %w", err)
+	}
+
+	// The SDK writes camelCase connector keys inherited from JS objects;
+	// canonicalize them so every language produces the same snake_case shape.
+	sys, err := manifest.LoadFromProjectRoot(root)
+	if err != nil {
+		return fmt.Errorf("load manifest: %w", err)
+	}
+	manifest.Canonicalize(sys)
+	if err := manifest.SaveToProjectRoot(root, sys); err != nil {
+		return fmt.Errorf("write canonical manifest: %w", err)
 	}
 
 	if opts.Verbose {
