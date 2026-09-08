@@ -18,6 +18,10 @@ type RegisterRequest struct {
 	// ExecutionConfigurations carries opaque executor-requirement metadata that
 	// N.O.R.E. persists alongside the system for later runtime assembly.
 	ExecutionConfigurations any `json:"execution_configurations,omitempty"`
+
+	// Force clears the registered system for the resolved name:version — and
+	// removes any instances built from it — before registering the new one.
+	Force bool `json:"force,omitempty"`
 }
 
 // RegisterStatus describes the outcome of a registration against a durable key.

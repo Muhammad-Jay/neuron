@@ -39,6 +39,19 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:               now,
 	}
 
+	if req.Force {
+		// Clear the system for (name, version) and remove any instances built
+		// from it so the replacement is authoritative.
+		if _, err := h.instances.RemoveBySystem(r.Context(), key); err != nil {
+			utils.ErrorJSON(w, http.StatusInternalServerError, err)
+			return
+		}
+		if err := h.systems.Delete(r.Context(), protocol.InstanceKey{SystemID: key.SystemID, Version: key.Version}); err != nil {
+			utils.ErrorJSON(w, http.StatusInternalServerError, err)
+			return
+		}
+	}
+
 	created, replaced, err := h.systems.Register(r.Context(), reg)
 	if err != nil {
 		utils.ErrorJSON(w, http.StatusInternalServerError, err)

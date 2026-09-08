@@ -48,6 +48,7 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error {
 	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
+	force, _ := cmd.Flags().GetBool("force")
 	langFlag, _ := cmd.Flags().GetString("lang")
 	rootFlag, _ := cmd.Flags().GetString("root")
 
@@ -71,12 +72,12 @@ func registerCmdHandler(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("build project: %w", err)
 	}
 
-	return register(ctx, cfg, root, verbose)
+	return register(ctx, cfg, root, verbose, force)
 }
 
 // register performs the compile + resolve + register flow against the manifest
 // already produced at root.
-func register(ctx context.Context, cfg config.Config, root string, verbose bool) error {
+func register(ctx context.Context, cfg config.Config, root string, verbose bool, force bool) error {
 	c, cleanup, err := bootstrap.SetupClient(ctx, bootstrap.Options{Config: cfg})
 	if err != nil {
 		return err
@@ -117,6 +118,7 @@ func register(ctx context.Context, cfg config.Config, root string, verbose bool)
 		Key:                     key,
 		System:                  *sys,
 		ExecutionConfigurations: configs,
+		Force:                   force,
 	}
 
 	result, err := c.Register(ctx, request)
