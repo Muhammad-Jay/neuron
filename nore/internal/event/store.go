@@ -130,4 +130,19 @@ func (s *Store) key(executionID, eventID core.ID) string {
 	return sqlite.SanitizeKey("events", string(executionID), string(eventID))
 }
 
+// DeleteExecution removes every persisted event recorded for the execution.
+func (s *Store) DeleteExecution(ctx context.Context, executionID core.ID) error {
+	prefix := sqlite.SanitizeKey("events", string(executionID))
+	keys, err := s.store.List(ctx, prefix)
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if err := s.store.Delete(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // unixNanoToTime intentionally deleted; time.Unix is used directly in load.

@@ -39,7 +39,11 @@ func New() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(newListCmd())
+	cmd.AddCommand(
+		newListCmd(),
+		newRemoveCmd(),
+		newClearCmd(),
+	)
 
 	return cmd
 }

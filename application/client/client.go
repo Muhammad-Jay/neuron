@@ -224,3 +224,18 @@ func (c *Client) GetInstanceById(ctx context.Context, instanceID string) (protoc
 
 	return response.Data, nil
 }
+
+// RemoveInstance stops and deletes the instance identified by target, which
+// may be an instance ID (inst_*) or a colon-encoded system key.
+func (c *Client) RemoveInstance(ctx context.Context, target string) error {
+	if target == "" {
+		return fmt.Errorf("instance target is required")
+	}
+	endpoint := fmt.Sprintf(protocol.InstanceByIDPath, url.PathEscape(target))
+	return c.conn.Do(ctx, http.MethodDelete, endpoint, nil, nil)
+}
+
+// ClearInstances stops and deletes every tracked instance.
+func (c *Client) ClearInstances(ctx context.Context) error {
+	return c.conn.Do(ctx, http.MethodDelete, protocol.InstancesPath, nil, nil)
+}

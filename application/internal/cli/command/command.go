@@ -9,15 +9,18 @@ var (
 
 	Instance = "instance"
 	InstanceList = "list [instance-id]"
+	InstanceRemove = "remove [instance-id|system-key]"
+	InstanceClear = "clear"
 
 	Register = "register"
 
 	Daemon = "daemon"
 
 	Executor      = "executor"
-	ExecutorInstall = "install [name@version]"
 	ExecutorList    = "list"
 	ExecutorInspect = "inspect [name@version]"
-	ExecutorRemove  = "remove [name@version]"
+
+	Add = "add [name@version]"
+	Remove = "remove [name@version]"
 )
 

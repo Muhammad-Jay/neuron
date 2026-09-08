@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/event"
@@ -81,6 +82,30 @@ func (m *Manager) GetByID(id string) (*Instance, bool) {
 	defer m.mu.RUnlock()
 	i, ok := m.instancesByID[id]
 	return i, ok
+}
+
+// Resolve returns the live runtime for key without creating it. An exact key
+// matches directly; a partial key (name, name:version, or one carrying a hash
+// or env) is resolved through the registered systems so version-without-hash
+// addresses the most recently registered artifact. Returns false when no
+// instance exists for the key.
+func (m *Manager) Resolve(ctx context.Context, key protocol.InstanceKey) (*Instance, bool) {
+	m.mu.RLock()
+	if i, ok := m.instancesByKey[key]; ok {
+		m.mu.RUnlock()
+		return i, true
+	}
+	m.mu.RUnlock()
+
+	if reg, err := m.systems.Resolve(ctx, key); err == nil {
+		m.mu.RLock()
+		if i, ok := m.instancesByKey[reg.Key]; ok {
+			m.mu.RUnlock()
+			return i, true
+		}
+		m.mu.RUnlock()
+	}
+	return nil, false
 }
 
 // GetOrCreate returns the live runtime for key, lazily constructing it from
@@ -184,4 +209,96 @@ func (m *Manager) Stop(id string) error {
 		log.Printf("persist instance metadata for %s: %v", i.ID, err)
 	}
 	return nil
+}
+
+// Remove stops and removes the instance addressed by target (an instance ID
+// or a colon-encoded system key). The instance's executions and events are
+// deleted along with its durable metadata.
+func (m *Manager) Remove(ctx context.Context, target string) (removed bool, err error) {
+	if strings.HasPrefix(strings.TrimSpace(target), "inst_") {
+		var inst *Instance
+		inst, ok := m.GetByID(target)
+		if !ok {
+			return false, nil
+		}
+		return true, m.removeInstance(ctx, inst)
+	}
+
+	key, err := protocol.ParseKey(target)
+	if err != nil {
+		return false, fmt.Errorf("invalid instance target %q: %w", target, err)
+	}
+	inst, ok := m.Resolve(ctx, key)
+	if !ok {
+		return false, nil
+	}
+	return true, m.removeInstance(ctx, inst)
+}
+
+// removeInstance deletes an instance's runtime, executions, events and
+// metadata. It is safe for both live and metadata-only (restored) instances.
+func (m *Manager) removeInstance(ctx context.Context, inst *Instance) error {
+	if err := inst.Stop(); err != nil {
+		return err
+	}
+
+	for _, exec := range inst.ListExecutions() {
+		inst.Store().Delete(exec.ID)
+		if err := inst.EventStore().DeleteExecution(ctx, exec.ID); err != nil {
+			log.Printf("delete events for execution %s on %s: %v", exec.ID, inst.ID, err)
+		}
+	}
+
+	m.mu.Lock()
+	delete(m.instancesByID, inst.ID)
+	delete(m.instancesByKey, inst.Key)
+	m.mu.Unlock()
+
+	if err := m.metadata.Delete(ctx, inst.ID); err != nil {
+		log.Printf("delete instance metadata for %s: %v", inst.ID, err)
+	}
+	return nil
+}
+
+// RemoveBySystem stops and removes every instance whose key addresses the
+// given system, optionally scoped to the key's version. Returns the number of
+// instances removed.
+func (m *Manager) RemoveBySystem(ctx context.Context, key protocol.InstanceKey) (int, error) {
+	m.mu.RLock()
+	var matches []*Instance
+	for _, inst := range m.instancesByID {
+		if inst.Key.SystemID != key.SystemID {
+			continue
+		}
+		if key.Version != "" && key.Version != protocol.VersionLatest && inst.Key.Version != key.Version {
+			continue
+		}
+		matches = append(matches, inst)
+	}
+	m.mu.RUnlock()
+
+	for _, inst := range matches {
+		if err := m.removeInstance(ctx, inst); err != nil {
+			return 0, err
+		}
+	}
+	return len(matches), nil
+}
+
+// Clear stops and removes every tracked instance.
+func (m *Manager) Clear(ctx context.Context) error {
+	m.mu.RLock()
+	instances := make([]*Instance, 0, len(m.instancesByID))
+	for _, inst := range m.instancesByID {
+		instances = append(instances, inst)
+	}
+	m.mu.RUnlock()
+
+	var firstErr error
+	for _, inst := range instances {
+		if err := m.removeInstance(ctx, inst); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }

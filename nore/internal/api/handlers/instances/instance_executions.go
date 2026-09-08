@@ -16,7 +16,7 @@ import (
 
 func (h *Handler) ListExecutions(w http.ResponseWriter, r *http.Request) {
 	id := utils.PathID(r.PathValue("id"))
-	i, ok := h.instances.GetByID(id)
+	i, ok := h.resolveInstance(r, id)
 	if !ok {
 		utils.ErrorJSON(w, http.StatusNotFound, fmt.Errorf("instance %s not found", id))
 		return

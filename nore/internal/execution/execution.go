@@ -40,6 +40,7 @@ type ServiceExecutionState struct {
 type Execution struct {
 	ID             shared.ID
 	CorrelationID  shared.ID
+	InstanceID     shared.ID
 	Blueprint      *types.ExecutionBlueprint
 	mu             sync.RWMutex
 	status         Status
@@ -58,7 +59,7 @@ type Execution struct {
 	done chan struct{}
 }
 
-func NewExecution(blueprint *types.ExecutionBlueprint, correlationID shared.ID) (*Execution, error) {
+func NewExecution(blueprint *types.ExecutionBlueprint, correlationID shared.ID, instanceID shared.ID) (*Execution, error) {
 	if blueprint == nil {
 		return nil, errors.New("execution blueprint is required")
 	}
@@ -70,7 +71,7 @@ func NewExecution(blueprint *types.ExecutionBlueprint, correlationID shared.ID) 
 		states[serviceID] = ServiceExecutionState{Status: ServicePending}
 	}
 	return &Execution{
-		ID: shared.NewID("exec_"), CorrelationID: correlationID, Blueprint: blueprint,
+		ID: shared.NewID("exec_"), CorrelationID: correlationID, InstanceID: instanceID, Blueprint: blueprint,
 		status: StatusPending, initialInput: make(map[string]any),
 		inputs: make(map[shared.ID]map[string]any), outputs: make(map[shared.ID]map[string]any), states: states,
 		done: make(chan struct{}),

@@ -107,6 +107,39 @@ func (s *ExecutionStore) List() []*Execution {
 	return result
 }
 
+func (s *ExecutionStore) ListByInstance(instanceID shared.ID) []*Execution {
+	s.mu.RLock()
+	keys, err := s.store.List(context.Background(), "executions/")
+	s.mu.RUnlock()
+
+	result := make([]*Execution, 0)
+	seen := make(map[shared.ID]bool)
+
+	for _, exec := range s.mem.List() {
+		if exec.InstanceID != instanceID {
+			continue
+		}
+		result = append(result, exec)
+		seen[exec.ID] = true
+	}
+
+	if err != nil {
+		return result
+	}
+	for _, key := range keys {
+		id := shared.ID(extractID(key))
+		if seen[id] {
+			continue
+		}
+		exec, ok := s.loadFromStore(id)
+		if !ok || exec.InstanceID != instanceID {
+			continue
+		}
+		result = append(result, exec)
+	}
+	return result
+}
+
 func (s *ExecutionStore) loadFromStore(executionID shared.ID) (*Execution, bool) {
 	data, err := s.store.Get(context.Background(), s.key(executionID))
 	if err != nil {

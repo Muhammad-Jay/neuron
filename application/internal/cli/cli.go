@@ -38,6 +38,7 @@ func init() {
 	RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output (shows N.O.R.E. daemon logs)")
 	RootCmd.PersistentFlags().String("remote", "", "Remote N.O.R.E. endpoint (e.g., https://api.nore.example.com)")
 	RootCmd.PersistentFlags().String("nore-path", "", "Path to the nore daemon binary")
+	RootCmd.PersistentFlags().Bool("force", false, "Force replacement (clear existing state before the command acts)")
 
 	// Load the effective configuration once flags are parsed and inject it on
 	// the command context so every subcommand can read it without touching
@@ -59,6 +60,8 @@ func init() {
 		initcmd.New(),
 		register.New(),
 		executor.New(),
+		executor.NewAddCmd(),
+		executor.NewRemoveCmd(),
 	)
 }
 

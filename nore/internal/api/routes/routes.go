@@ -20,7 +20,9 @@ func BuildRoutes(mux *http.ServeMux, mgr *instance.Manager, systems *system.Repo
 	instHandler := instances.New(mgr, systems, compiler)
 	mux.HandleFunc("GET /v1/instances", instHandler.ListInstances)
 	mux.HandleFunc("POST /v1/instances", instHandler.CreateInstance)
+	mux.HandleFunc("DELETE /v1/instances", instHandler.ClearInstances)
 	mux.HandleFunc("GET /v1/instances/{id}", instHandler.GetInstanceByID)
+	mux.HandleFunc("DELETE /v1/instances/{id}", instHandler.RemoveInstance)
 
 	// Executions
 	mux.HandleFunc("POST /v1/instances/{id}/executions", instHandler.Execute)
@@ -30,7 +32,7 @@ func BuildRoutes(mux *http.ServeMux, mgr *instance.Manager, systems *system.Repo
 	mux.HandleFunc("GET /v1/instances/{id}/executions/{execID}/events/stream", instHandler.StreamExecutionEvents)
 
 	// Register
-	reg := register.New(systems, compiler)
+	reg := register.New(mgr, systems, compiler)
 	mux.HandleFunc("POST /v1/register", reg.Register)
 
 	handler := middleware.Recovery(mux)

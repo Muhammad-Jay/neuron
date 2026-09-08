@@ -9,6 +9,7 @@ import (
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/analytics"
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
+	"github.com/Muhammad-Jay/neuron/nore/internal/data"
 	"github.com/Muhammad-Jay/neuron/nore/internal/event"
 	"github.com/Muhammad-Jay/neuron/nore/internal/execution"
 	"github.com/Muhammad-Jay/neuron/nore/internal/execution/engine"
@@ -301,8 +302,11 @@ func (i *Instance) Execute(ctx context.Context, input map[string]any) (*executio
 	if i.Status() != StatusRunning {
 		return nil, fmt.Errorf("instance %s is not running", i.ID)
 	}
+	// Canonical casing is snake_case; normalize camelCase --input (e.g. from
+	// a TypeScript-authored system) once so every expression resolves.
+	input = data.SnakeMap(input)
 
-	exec, err := execution.NewExecution(i.Blueprint, shared.NewID("request_"))
+	exec, err := execution.NewExecution(i.Blueprint, shared.NewID("request_"), shared.ID(i.ID))
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +331,7 @@ func (i *Instance) Execute(ctx context.Context, input map[string]any) (*executio
 }
 
 func (i *Instance) ListExecutions() []*execution.Execution {
-	return i.store.List()
+	return i.store.ListByInstance(shared.ID(i.ID))
 }
 
 func (i *Instance) GetExecution(id shared.ID) (*execution.Execution, bool) {

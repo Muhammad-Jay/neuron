@@ -10,6 +10,7 @@ import (
 type ExecutionSnapshot struct {
 	ID            core.ID                           `json:"id"`
 	CorrelationID core.ID                           `json:"correlation_id"`
+	InstanceID    core.ID                           `json:"instance_id,omitempty"`
 	Status        Status                            `json:"status"`
 	InitialInput  map[string]any                    `json:"initial_input,omitempty"`
 	Inputs        map[core.ID]map[string]any        `json:"inputs,omitempty"`
@@ -33,6 +34,7 @@ func (e *Execution) Snapshot() *ExecutionSnapshot {
 	return &ExecutionSnapshot{
 		ID:            e.ID,
 		CorrelationID: e.CorrelationID,
+		InstanceID:    e.InstanceID,
 		Status:        e.status,
 		InitialInput:  cloneMap(e.initialInput),
 		Inputs:        cloneInputsMap(e.inputs),
@@ -75,6 +77,7 @@ func UnmarshalExecution(data []byte) (*Execution, error) {
 	e := &Execution{
 		ID:             snap.ID,
 		CorrelationID:  snap.CorrelationID,
+		InstanceID:     snap.InstanceID,
 		status:         snap.Status,
 		initialInput:   snap.InitialInput,
 		inputs:         snap.Inputs,

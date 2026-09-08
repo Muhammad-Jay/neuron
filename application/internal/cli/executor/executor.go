@@ -17,7 +17,7 @@ func splitRef(ref string) (typ, version string, err error) {
 	typ = strings.TrimSpace(typ)
 	version = strings.TrimSpace(version)
 	if typ == "" {
-		return "", "", fmt.Errorf("executor name is required (e.g. %s)", command.ExecutorInstall)
+		return "", "", fmt.Errorf("executor name is required (e.g. %s)", command.Add)
 	}
 	return typ, version, nil
 }
@@ -48,18 +48,18 @@ against the configured registries (github, local) and installed immutably under
 	}
 
 	cmd.AddCommand(
-		newInstallCmd(),
 		newListCmd(),
 		newInspectCmd(),
-		newRemoveCmd(),
 	)
 
 	return cmd
 }
 
-func newInstallCmd() *cobra.Command {
+// NewAddCmd returns the top-level `neuron add` command, which resolves and
+// installs an executor package.
+func NewAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   command.ExecutorInstall,
+		Use:   command.Add,
 		Short: "Resolve and install an executor package",
 		Long: `Resolve and install an executor package into the local store.
 
@@ -167,9 +167,11 @@ func newInspectCmd() *cobra.Command {
 	return cmd
 }
 
-func newRemoveCmd() *cobra.Command {
+// NewRemoveCmd returns the top-level `neuron remove` command, which removes an
+// installed executor package.
+func NewRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   command.ExecutorRemove,
+		Use:   command.Remove,
 		Short: "Remove an installed executor",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

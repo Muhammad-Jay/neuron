@@ -13,4 +13,5 @@ type ExecutionRepository interface {
 	Save(ctx context.Context, execution *executionmodel.Execution) error
 	Delete(executionID core.ID)
 	List() []*executionmodel.Execution
+	ListByInstance(instanceID core.ID) []*executionmodel.Execution
 }

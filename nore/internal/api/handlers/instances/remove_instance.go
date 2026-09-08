@@ -8,24 +8,19 @@ import (
 	"github.com/Muhammad-Jay/neuron/shared/types/protocol"
 )
 
-func (h *Handler) GetInstanceByID(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RemoveInstance(w http.ResponseWriter, r *http.Request) {
 	id := utils.PathID(r.PathValue("id"))
-	i, ok := h.resolveInstance(r, id)
-	if !ok {
+	removed, err := h.instances.Remove(r.Context(), id)
+	if err != nil {
+		utils.ErrorJSON(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !removed {
 		utils.ErrorJSON(w, http.StatusNotFound, fmt.Errorf("instance %s not found", id))
 		return
 	}
-
 	utils.WriteJSON(w, http.StatusOK, protocol.Response{
-		Message: "instance",
+		Message: "instance removed",
 		Status:  http.StatusOK,
-		Data: protocol.InstanceResponse{
-			ID:       i.ID,
-			Status:   string(i.Status()),
-			SystemID: i.Key.SystemID,
-			Version:  i.Key.Version,
-			Hash:     i.Key.Hash,
-			Env:      i.Key.Env,
-		},
 	})
 }

@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/bootstrap"
@@ -48,6 +49,9 @@ func instanceListCmdHandler(cmd *cobra.Command, args []string) error {
 
 // resolveInstanceID returns the instance ID given either as the first
 // positional argument or via the --target flag. Providing both is an error.
+// Instance IDs are returned unchanged; a user-facing key (name, name:version,
+// name@version, ...) is normalized to its colon-encoded form so the server
+// resolves it to the same instance as the ID would.
 func resolveInstanceID(cmd *cobra.Command, args []string) (string, error) {
 	flagID, _ := cmd.Flags().GetString("target")
 
@@ -55,11 +59,29 @@ func resolveInstanceID(cmd *cobra.Command, args []string) (string, error) {
 		return "", fmt.Errorf("instance specified both as argument and --target; use only one")
 	}
 
+	target := flagID
 	if len(args) > 0 {
-		return args[0], nil
+		target = args[0]
 	}
+	return normalizeInstanceTarget(target)
+}
 
-	return flagID, nil
+// normalizeInstanceTarget maps a user-facing target to the canonical string
+// for the REST API: instance IDs (inst_*) pass through unchanged; anything
+// else is parsed as a system key and converted to its colon-encoded form.
+func normalizeInstanceTarget(target string) (string, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(target, "inst_") {
+		return target, nil
+	}
+	key, err := protocol.ParseUserKey(target)
+	if err != nil {
+		return "", fmt.Errorf("invalid instance target %q: %w", target, err)
+	}
+	return key.ColonString(), nil
 }
 
 // listInstances lists instances, honoring the --all and --status filters.

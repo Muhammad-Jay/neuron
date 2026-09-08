@@ -74,6 +74,49 @@ func ParseKey(s string) (InstanceKey, error) {
 	return key, nil
 }
 
+// ParseUserKey accepts the human-facing forms of an instance key and
+// normalizes them to an InstanceKey:
+//
+//   - colon form: name[:version[:hash[:env]]] (see ParseKey)
+//   - at form:    name@version[#hash][:env]
+//   - bare name:  latest version is assumed
+//
+// Instance IDs (inst_*) are NOT parsed here; callers that accept both should
+// branch on the prefix before calling.
+func ParseUserKey(s string) (InstanceKey, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return InstanceKey{}, fmt.Errorf("instance key is empty")
+	}
+	if !strings.Contains(s, "@") {
+		return ParseKey(s)
+	}
+
+	name, rest, ok := strings.Cut(s, "@")
+	if !ok || name == "" {
+		return InstanceKey{}, fmt.Errorf("invalid instance key %q", s)
+	}
+	key := InstanceKey{SystemID: name, Version: VersionLatest}
+
+	// rest = version[#hash][:env]
+	if hashAt := strings.IndexByte(rest, '#'); hashAt >= 0 {
+		key.Version = rest[:hashAt]
+		hashEnv := rest[hashAt+1:]
+		if envAt := strings.IndexByte(hashEnv, ':'); envAt >= 0 {
+			key.Hash = hashEnv[:envAt]
+			key.Env = hashEnv[envAt+1:]
+		} else {
+			key.Hash = hashEnv
+		}
+	} else if envAt := strings.IndexByte(rest, ':'); envAt >= 0 {
+		key.Version = rest[:envAt]
+		key.Env = rest[envAt+1:]
+	} else {
+		key.Version = rest
+	}
+	return key, nil
+}
+
 type CreateInstanceRequest struct {
 	Key    InstanceKey  `json:"key"`
 	System *core.System `json:"systems"`
@@ -99,10 +142,10 @@ type ExecuteRequest struct {
 }
 
 type ExecuteResponse struct {
-	ExecutionID core.ID    `json:"execution_id"`
-	InstanceID  string     `json:"instance_id"`
-	Status      string     `json:"status"`
-	Time        time.Time  `json:"time"`
+	ExecutionID core.ID   `json:"execution_id"`
+	InstanceID  string    `json:"instance_id"`
+	Status      string    `json:"status"`
+	Time        time.Time `json:"time"`
 }
 
 // ExecutionResult is returned by a wait-mode Execute request once the
