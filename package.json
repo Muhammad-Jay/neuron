@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build:sdk": "pnpm --filter @neuron/sdk build",
+    "build:shared": "go build shared/...",
     "test:sdk": "pnpm --filter @neuron/sdk test",
     "typecheck:sdk": "pnpm --filter @neuron/sdk typecheck",
     "script": "bash scripts/script.sh"
