@@ -17,6 +17,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version is set by main.go before Execute is called.
+var Version = "dev"
+
 var cfgFile string
 
 var RootCmd = &cobra.Command{
@@ -29,6 +32,8 @@ var RootCmd = &cobra.Command{
 
 // Execute is called by main.go to start the CLI.
 func Execute() error {
+	RootCmd.Version = Version
+	RootCmd.SetVersionTemplate("{{.Name}} {{.Version}}\n")
 	return RootCmd.Execute()
 }
 

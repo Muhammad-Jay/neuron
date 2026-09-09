@@ -3,9 +3,13 @@
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "build": "pnpm build:sdk",
     "build:sdk": "pnpm --filter @neuron/sdk build",
+    "test": "pnpm test:sdk",
     "test:sdk": "pnpm --filter @neuron/sdk test",
+    "typecheck": "pnpm typecheck:sdk",
     "typecheck:sdk": "pnpm --filter @neuron/sdk typecheck",
-    "script": "bash scripts/script.sh"
+    "validate": "bash scripts/script.sh",
+    "build:release": "bash scripts/build.sh"
   }
 }

@@ -20,19 +20,30 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/system"
 )
 
+// Version is set at build time via -ldflags "-X main.Version=...".
+// A development build defaults to "dev".
+var Version = "dev"
+
 func main() {
 	var (
-		port    string
-		socket  string
-		workers int
-		dataDir string
+		showVersion bool
+		port        string
+		socket      string
+		workers     int
+		dataDir     string
 	)
 
+	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.StringVar(&port, "port", ":7432", "TCP address for the N.O.R.E. API; empty disables TCP")
 	flag.StringVar(&socket, "socket", defaultSocket(), "Unix socket for local CLI clients; empty disables Unix socket")
 	flag.IntVar(&workers, "workers", 8, "executor worker count")
 	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "persistent data directory")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("nore %s\n", Version)
+		return
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

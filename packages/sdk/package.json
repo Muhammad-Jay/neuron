@@ -18,6 +18,7 @@
     "dist",
     "README.md"
   ],
+  "license": "MIT",
   "scripts": {
     "build": "tsup",
     "lint": "eslint . --max-warnings 0",

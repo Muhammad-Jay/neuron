@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+
+      - name: Tidy modules
+        run: |
+          for mod in application shared nore; do
+            (cd "$mod" && go mod tidy)
+          done
+
+      - name: Test
+        run: |
+          for mod in application shared nore; do
+            (cd "$mod" && go test ./...)
+          done
+
+      - name: Vet
+        run: |
+          for mod in application shared nore; do
+            (cd "$mod" && go vet ./...)
+          done
+
+      - name: Build
+        run: |
+          go build ./application/cmd/neuron
+          go build ./nore/cmd/nore
+
+  sdk:
+    name: SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK
+        run: pnpm build:sdk
+
+      - name: Typecheck SDK
+        run: pnpm typecheck:sdk
+
+      - name: Test SDK
+        run: pnpm test:sdk

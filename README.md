@@ -2,7 +2,109 @@
 
 Neuron is a runtime for building and operating complex software systems from composable, executable capabilities.
 
-It is built around a simple idea:
+**Status:** v0.1.0 — First public development release
+
+---
+
+## Installation
+
+Download the latest release from [GitHub Releases](https://github.com/Muhammad-Jay/neuron/releases). Each archive contains both `neuron` and `nore`.
+
+```bash
+# Linux / macOS
+tar xzf neuron_0.1.0_<os>_<arch>.tar.gz
+sudo mv neuron_0.1.0_<os>_<arch>/neuron neuron_0.1.0_<os>_<arch>/nore /usr/local/bin/
+```
+
+See [Installation Guide](docs/INSTALLATION.md) for all platforms and checksum verification.
+
+## Quick Start
+
+```bash
+# Verify installation
+neuron --version
+nore --version
+
+# Initialize a project
+mkdir my-system && cd my-system
+neuron init
+
+# Start the runtime (in a separate terminal)
+nore
+
+# Register and run
+neuron register --root .
+neuron run my-system
+```
+
+See [Getting Started Guide](docs/GETTING_STARTED.md) for a complete walkthrough.
+
+## Core Concepts
+
+- **System** — a composition of services and their relationships
+- **Service** — an executable capability
+- **Connector** — how services communicate
+- **Executor** — the mechanism that runs a service (process, WASM, etc.)
+- **Instance** — a living realization of a System
+- **N.O.R.E.** — the runtime environment where instances operate
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/ARCHITECTURE.md) | How Neuron is structured and works internally |
+| [Getting Started](docs/GETTING_STARTED.md) | First-use walkthrough |
+| [Installation](docs/INSTALLATION.md) | Download, install, and verify |
+| [Status](docs/STATUS.md) | Available, experimental, and planned features |
+| [Runtime](docs/RUNTIME.md) | N.O.R.E. execution model |
+| [Process Runtime](docs/RUNTIME_PROCESS.md) | Process executor backend |
+| [WASM Runtime](docs/RUNTIME_WASM.md) | WebAssembly executor backend |
+| [Executor Registry](docs/executors/) | Executor resolution and installation |
+| [TypeScript SDK](packages/sdk/README.md) | `@neuron/sdk` API reference |
+
+## Development
+
+```bash
+git clone https://github.com/Muhammad-Jay/neuron.git
+cd neuron
+
+# Build both binaries
+go build ./application/cmd/neuron
+go build ./nore/cmd/nore
+
+# Run all tests
+go test ./...
+
+# SDK (requires Node.js 22+ and pnpm)
+pnpm install
+pnpm build:sdk
+pnpm test:sdk
+pnpm typecheck:sdk
+
+# Cross-compile release archives
+bash scripts/build.sh
+```
+
+## Examples
+
+- [YAML Project](examples/ecommerce_order/) — order processing pipeline defined in YAML
+- [TypeScript Project](examples/ecommerce_order_ts/) — same pipeline using the TypeScript SDK
+- [Go Project](examples/simple_response/) — programmatic system definition in Go
+- [Custom Executor](examples/executors/) — writing and building an external executor
+
+## Roadmap
+
+See [Status](docs/STATUS.md) for current state. Future work includes container and remote runtimes, automatic updates, package-manager distribution, and broader executor ecosystem support.
+
+## License
+
+Neuron is released under the MIT License. See [LICENSE](LICENSE).
+
+---
+
+# The Philosophy
+
+Neuron is built around a simple idea:
 
 > Software should be composed from things that can do something, connected by explicit relationships, and operated by a runtime that does not need to understand what those things are.
 
@@ -11,8 +113,6 @@ Neuron is not a workflow platform.
 It is not tied to a particular kind of application, service, language, or execution model.
 
 It is closer to a small operating environment, a micro-kernel-like foundation for systems whose capabilities can be composed, connected, and operated independently of the technology used to implement them.
-
----
 
 ## The Idea
 

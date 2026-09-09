@@ -1,19 +1,24 @@
-for mod in ./application/ ./shared/ ./nore/; do
+#!/usr/bin/env bash
+
+set -o pipefail
+
+for mod in ./application ./shared ./nore; do
     echo "Processing $mod..."
     (
-        cd "$mod" || exit
+        cd "$mod" || exit 1
         go mod tidy
         go test ./... &&
         go build ./... &&
         echo "$mod built successfully" || echo "$mod build failed"
-    )
-done && for pkg in ./packages/*; do
-    echo "Processing $pkg..."
-    (
-        cd "$pkg" || exit
-        pnpm typecheck &&
-        pnpm test && 
-        pnpm build &&
-        echo "$pkg built successfully" || echo "$pkg build failed"
-    )
-done && echo "All tests and builds passed successfully!"
+    ) || exit 1
+done
+
+echo "Processing packages/sdk..."
+(
+    pnpm typecheck:sdk &&
+    pnpm test:sdk &&
+    pnpm build:sdk &&
+    echo "sdk built successfully"
+) || exit 1
+
+echo "All tests and builds passed successfully!"
