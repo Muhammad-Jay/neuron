@@ -9,6 +9,10 @@ type RuntimeInfo struct {
 	Type       string `json:"type"`
 	Protocol   string `json:"protocol,omitempty"`
 	Entrypoint string `json:"entrypoint"`
+
+	// MaxWorkers bounds the number of concurrent worker processes the runtime
+	// may spawn for this executor. A value of 0 means the runtime default.
+	MaxWorkers int `json:"maxWorkers,omitempty"`
 }
 
 // ResolvedExecutor is the frozen dependency record produced when a System is

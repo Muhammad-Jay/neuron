@@ -4,5 +4,6 @@ use (
 	./nore
 	./application
 	./shared
+	./packages/executor-go
 	examples/simple_response
 )

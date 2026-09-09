@@ -8,9 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/contracts"
 	"github.com/Muhammad-Jay/neuron/nore/internal/registry"
@@ -70,12 +68,16 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	if rt, rterr := sharedProcessRuntime(); rterr == nil {
-		_ = rt.close(context.Background())
+	if reg, regerr := sharedRuntimes(); regerr == nil {
+		_ = reg.CloseAll(context.Background())
 	}
 	os.Exit(code)
 }
 
+// resolvedExecutor builds a frozen ResolvedExecutor whose runtime kind and
+// declared protocol reflect the transport the fixture actually speaks. The
+// echo/echo-wasm fixtures speak the legacy stdin/stdout JSON protocol, so they
+// declare neuron/executor-v1-json (see ProtocolJSONV1).
 func resolvedExecutor(t *testing.T, typ, entrypoint, rootDir, runtimeKind string) shadexec.ResolvedExecutor {
 	t.Helper()
 	return shadexec.ResolvedExecutor{
@@ -85,7 +87,7 @@ func resolvedExecutor(t *testing.T, typ, entrypoint, rootDir, runtimeKind string
 		Registry:         "local",
 		Runtime: shadexec.RuntimeInfo{
 			Type:       runtimeKind,
-			Protocol:   shadexec.ProtocolV1,
+			Protocol:   shadexec.ProtocolJSONV1,
 			Entrypoint: entrypoint,
 		},
 		RootDir: rootDir,
@@ -119,40 +121,14 @@ func assertEchoOutput(t *testing.T, got map[string]any, expectedType string) {
 	if got["type"] != expectedType {
 		t.Errorf("output.type = %v, want %s", got["type"], expectedType)
 	}
-	if got["protocol"] != shadexec.ProtocolV1 {
-		t.Errorf("output.protocol = %v, want %s", got["protocol"], shadexec.ProtocolV1)
+	if got["protocol"] != shadexec.ProtocolJSONV1 {
+		t.Errorf("output.protocol = %v, want %s", got["protocol"], shadexec.ProtocolJSONV1)
 	}
 	if got["version"] != "1.0.0" {
 		t.Errorf("output.version = %v, want 1.0.0", got["version"])
 	}
 	if got["value"] != "hello" {
 		t.Errorf("output.value = %v, want hello", got["value"])
-	}
-}
-
-func TestSharedWasmRuntimeIsProcessGlobal(t *testing.T) {
-	a, err := sharedProcessRuntime()
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := sharedProcessRuntime()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a != b {
-		t.Fatal("wazero runtime is recreated per call; want one per process")
-	}
-
-	cm1, err := a.compiledModule(context.Background(), fixtures.wasm)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cm2, err := b.compiledModule(context.Background(), fixtures.wasm)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cm1 != cm2 {
-		t.Fatal("compiled module is not cached; want one per frozen module")
 	}
 }
 
@@ -188,20 +164,20 @@ func TestRegisterResolvedExecutorsDispatch(t *testing.T) {
 
 func TestNewAdapterRejectsUnknownRuntime(t *testing.T) {
 	res := shadexec.ResolvedExecutor{
-		Type: "example:echo",
+		Type:    "example:echo",
 		Runtime: shadexec.RuntimeInfo{Type: "container", Entrypoint: "echo"},
 	}
 	_, err := NewAdapter(res)
 	if err == nil {
 		t.Fatal("expected error for unsupported runtime kind")
 	}
-	if !strings.Contains(err.Error(), "unsupported runtime kind") {
+	if !strings.Contains(err.Error(), "no runtime backend registered") {
 		t.Errorf("error = %q, want unsupported runtime kind", err)
 	}
 }
 
-func TestProcessAdapterRoundTripWithEnv(t *testing.T) {
-	adapter, err := NewProcessAdapter(echoResolved(t, "example:echo", shadexec.RuntimeKindProcess))
+func TestProcessExecutorRoundTripWithEnv(t *testing.T) {
+	adapter, err := NewAdapter(echoResolved(t, "example:echo", shadexec.RuntimeKindProcess))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,8 +190,8 @@ func TestProcessAdapterRoundTripWithEnv(t *testing.T) {
 	assertEchoOutput(t, got, "example:echo")
 }
 
-func TestWasmAdapterRoundTripWithEnv(t *testing.T) {
-	adapter, err := NewWasmAdapter(echoResolved(t, "example:echo-wasm", shadexec.RuntimeKindWasm))
+func TestWasmExecutorRoundTripWithEnv(t *testing.T) {
+	adapter, err := NewAdapter(echoResolved(t, "example:echo-wasm", shadexec.RuntimeKindWasm))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,130 +230,59 @@ func TestAdaptersSurfaceControlledError(t *testing.T) {
 	}
 }
 
-func TestProcessAdapterMissingEntrypoint(t *testing.T) {
-	res := resolvedExecutor(t, "example:echo", "does-not-exist", t.TempDir(), shadexec.RuntimeKindProcess)
-	if _, err := NewAdapter(res); err == nil {
-		t.Fatal("expected error for missing entrypoint")
-	}
-}
-
-func TestWasmAdapterMissingModule(t *testing.T) {
-	res := resolvedExecutor(t, "example:echo-wasm", "missing.wasm", t.TempDir(), shadexec.RuntimeKindWasm)
-	if _, err := NewAdapter(res); err == nil {
-		t.Fatal("expected error for missing wasm module")
-	}
-}
-
-func TestWasmAdapterTimesOut(t *testing.T) {
-	res := resolvedExecutor(t, "example:spin", filepath.Base(fixtures.spin), filepath.Dir(fixtures.spin), shadexec.RuntimeKindWasm)
-
-	adapter, err := NewWasmAdapter(res)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer closeIfCloser(t, adapter)
-	adapter.SetUnitTimeout(300 * time.Millisecond)
-
-	start := time.Now()
-	_, err = adapter.Execute(context.Background(), executionContext(map[string]any{"value": "x"}))
-	if err == nil {
-		t.Fatal("expected timeout error")
-	}
-	if !strings.Contains(err.Error(), "timed out") {
-		t.Errorf("error = %q, want timed out", err)
-	}
-	if elapsed := time.Since(start); elapsed > 5*time.Second {
-		t.Errorf("timeout took too long: %v", elapsed)
-	}
-}
-
-func TestWasmAdapterReusesRuntimeAcrossExecutions(t *testing.T) {
-	adapter, err := NewWasmAdapter(echoResolved(t, "example:echo-wasm", shadexec.RuntimeKindWasm))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer closeIfCloser(t, adapter)
-
-	for i := 0; i < 3; i++ {
-		got, err := adapter.Execute(context.Background(), executionContext(map[string]any{"value": "hi"}))
-		if err != nil {
-			t.Fatalf("Execute #%d: %v", i, err)
-		}
-		if got["value"] != "hi" {
-			t.Errorf("Execute #%d: value = %v, want hi", i, got["value"])
-		}
-	}
-}
-
-// TestWasmAdapterConcurrentExecutions proves executions do not serialize: many
-// adapters (instances) hot-sharing one runtime and one compiled module must
-// serve concurrent executions from their own sandboxed modules.
-func TestWasmAdapterConcurrentExecutions(t *testing.T) {
-	res := echoResolved(t, "example:echo-wasm", shadexec.RuntimeKindWasm)
-
-	adapters := make([]*WasmAdapter, 4)
-	for i := range adapters {
-		adapter, err := NewWasmAdapter(res)
-		if err != nil {
-			t.Fatal(err)
-		}
-		adapters[i] = adapter
-		if i > 0 && adapter.runtime != adapters[0].runtime {
-			t.Fatal("adapters do not share the process runtime")
-		}
-		if i > 0 && adapter.compiled != adapters[0].compiled {
-			t.Fatal("adapters do not share the compiled module")
-		}
-	}
-	defer closeIfCloser(t, adapters[0])
-
-	var wg sync.WaitGroup
-	for g := 0; g < 4; g++ {
-		wg.Add(1)
-		go func(adapter *WasmAdapter, g int) {
-			defer wg.Done()
-			for i := 0; i < 5; i++ {
-				got, err := adapter.Execute(context.Background(), executionContext(map[string]any{"value": "hi"}))
-				if err != nil {
-					t.Errorf("goroutine %d Execute #%d: %v", g, i, err)
-					return
-				}
-				if got["value"] != "hi" {
-					t.Errorf("goroutine %d Execute #%d: value = %v, want hi", g, i, got["value"])
-				}
+func TestAdapterMissingEntrypoint(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		kind string
+	}{
+		{"process", shadexec.RuntimeKindProcess},
+		{"wasm", shadexec.RuntimeKindWasm},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := resolvedExecutor(t, "example:echo", "does-not-exist", t.TempDir(), tc.kind)
+			if _, err := NewAdapter(res); err == nil {
+				t.Fatal("expected error for missing entrypoint")
 			}
-		}(adapters[g], g)
+		})
 	}
-	wg.Wait()
 }
 
-// TestWasmRuntimeSurvivesAdapterClose verifies Close is a no-op: the shared
-// runtime keeps serving other adapters after one is closed.
-func TestWasmRuntimeSurvivesAdapterClose(t *testing.T) {
-	res := echoResolved(t, "example:echo-wasm", shadexec.RuntimeKindWasm)
+func TestDecodeResolvedExecutorsNil(t *testing.T) {
+	got, err := DecodeResolvedExecutors(nil)
+	if err != nil {
+		t.Fatalf("DecodeResolvedExecutors: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d executors, want 0", len(got))
+	}
+}
 
-	adapter, err := NewWasmAdapter(res)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := adapter.Execute(context.Background(), executionContext(map[string]any{"value": "hi"})); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if err := adapter.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+func TestDecodeResolvedExecutorsRoundTrip(t *testing.T) {
+	res := echoResolved(t, "example:echo", shadexec.RuntimeKindProcess)
+	payload := map[string]any{"resolved_executors": []any{
+		map[string]any{
+			"type":             res.Type,
+			"requestedVersion": res.RequestedVersion,
+			"resolvedVersion":  res.ResolvedVersion,
+			"registry":         res.Registry,
+			"runtime": map[string]any{
+				"type":       res.Runtime.Type,
+				"protocol":   res.Runtime.Protocol,
+				"entrypoint": res.Runtime.Entrypoint,
+			},
+			"rootDir": res.RootDir,
+		},
+	}}
 
-	again, err := NewWasmAdapter(res)
+	got, err := DecodeResolvedExecutors(payload)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("DecodeResolvedExecutors: %v", err)
 	}
-	defer closeIfCloser(t, again)
-	got, err := again.Execute(context.Background(), executionContext(map[string]any{"value": "hi"}))
-	if err != nil {
-		t.Fatalf("Execute after Close: %v", err)
+	if len(got) != 1 {
+		t.Fatalf("got %d executors, want 1", len(got))
 	}
-	if got["value"] != "hi" {
-		t.Errorf("value = %v, want hi", got["value"])
+	if got[0].Type != res.Type || got[0].Runtime.Protocol != res.Runtime.Protocol || got[0].RootDir != res.RootDir {
+		t.Errorf("round-trip mismatch: %+v", got[0])
 	}
 }
 

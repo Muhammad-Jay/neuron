@@ -22,10 +22,16 @@ const (
 	// Kind is the discriminant of every executor.json manifest.
 	Kind = "Executor"
 
-	// ProtocolV1 is the wire protocol spoken over stdin/stdout by process
-	// executors. Executors must declare this (or a newer compatible protocol)
-	// in their manifest runtime.protocol.
+	// ProtocolV1 is the canonical wire protocol spoken by executor processes
+	// over gRPC (Unix domain sockets). Executors must declare this (or a
+	// newer compatible protocol) in their manifest runtime.protocol.
 	ProtocolV1 = "neuron/executor-v1"
+
+	// ProtocolJSONV1 is the legacy stdin/stdout JSON protocol spoken by
+	// one-shot executor processes and WASI modules (WASI has no socket
+	// interface, so gRPC is unavailable there). Executors that cannot host a
+	// gRPC server MUST declare this protocol in their manifest.
+	ProtocolJSONV1 = "neuron/executor-v1-json"
 
 	// ManifestFile is the mandatory manifest file inside every executor
 	// package and every installed executor directory.
@@ -68,8 +74,14 @@ type ManifestRuntime struct {
 	Entrypoint string `json:"entrypoint"`
 
 	// Protocol is the wire protocol spoken by the executor
-	// (neuron/executor-v1).
+	// (neuron/executor-v1 for gRPC process executors,
+	// neuron/executor-v1-json for stdin/stdout JSON executors).
 	Protocol string `json:"protocol,omitempty"`
+
+	// MaxWorkers bounds the number of concurrent worker processes the runtime
+	// may spawn for this executor. A value of 0 means the runtime default.
+	// Only meaningful for runtime types with long-lived workers (process).
+	MaxWorkers int `json:"maxWorkers,omitempty"`
 }
 
 // Platform maps one host platform (GOOS-GOARCH) to its artifact.
