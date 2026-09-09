@@ -56,8 +56,14 @@ type RuntimeSpec struct {
 	Entrypoint string
 
 	// Protocol is the wire protocol the executor speaks
-	// (neuron/executor-v1).
+	// (neuron/executor-v1 for gRPC process executors,
+	// neuron/executor-v1-json for stdin/stdout JSON executors).
 	Protocol string
+
+	// MaxWorkers bounds the number of concurrent worker processes the runtime
+	// may spawn for this executor. A value of 0 means the runtime default.
+	// Only meaningful for runtime types with long-lived workers (process).
+	MaxWorkers int
 }
 
 // Artifact is a downloadable binary for one platform.
@@ -138,6 +144,7 @@ func (i *Installed) Frozen(requestedVersion string) *shadexec.ResolvedExecutor {
 			Type:       i.Runtime.Type,
 			Protocol:   i.Runtime.Protocol,
 			Entrypoint: i.Runtime.Entrypoint,
+			MaxWorkers: i.Runtime.MaxWorkers,
 		},
 		Capabilities: i.Capabilities,
 		Services:     i.Services,

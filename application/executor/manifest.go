@@ -48,6 +48,7 @@ func PackageFromManifest(m *shadexec.Manifest, registry string, version string) 
 			Type:       m.Runtime.Type,
 			Entrypoint: m.Runtime.Entrypoint,
 			Protocol:   m.Runtime.Protocol,
+			MaxWorkers: m.Runtime.MaxWorkers,
 		},
 		Capabilities: m.Capabilities,
 		Services:     m.Services,

@@ -47,7 +47,7 @@ func writeExecutorPackage(t *testing.T, root, typ, version string) string {
 		Runtime: shadexec.ManifestRuntime{
 			Type:       "process",
 			Entrypoint: entrypoint,
-			Protocol:   shadexec.ProtocolV1,
+			Protocol:   shadexec.ProtocolJSONV1,
 		},
 		Services:     []string{"read"},
 		Capabilities: []string{"io.read"},
