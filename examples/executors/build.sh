@@ -31,6 +31,12 @@ go build -C "$SRC" -o "$echo_dir/echo" .
 # Portability-proven WASI module for the wasm runtime.
 GOOS=wasip1 GOARCH=wasm go build -C "$SRC" -o "$wasm_dir/echo.wasm" .
 
+# The echo example speaks the legacy stdin/stdout JSON protocol (one JSON
+# request on stdin, one JSON response on stdout). Under the canonical
+# neuron/executor-v1 (gRPC) meaning, stdout is transport not payload, so the
+# manifest must declare the JSON transport explicitly.
+JSON_PROTOCOL="neuron/executor-v1-json"
+
 cat > "$echo_dir/executor.json" <<EOF
 {
   "apiVersion": "neuron/v1",
@@ -40,7 +46,7 @@ cat > "$echo_dir/executor.json" <<EOF
     "version": "$VERSION",
     "description": "Echoes the execution input and captures NEURON_EXECUTOR_* env vars."
   },
-  "runtime": { "type": "process", "entrypoint": "echo", "protocol": "neuron/executor-v1" },
+  "runtime": { "type": "process", "entrypoint": "echo", "protocol": "$JSON_PROTOCOL" },
   "services": ["example:echo"],
   "capabilities": [],
   "platforms": { "$GOOS-$GOARCH": { "artifact": "echo" } }
@@ -56,7 +62,7 @@ cat > "$wasm_dir/executor.json" <<EOF
     "version": "$VERSION",
     "description": "Echoes the execution input as a WASI module and captures NEURON_EXECUTOR_* env vars."
   },
-  "runtime": { "type": "wasm", "entrypoint": "echo.wasm", "protocol": "neuron/executor-v1" },
+  "runtime": { "type": "wasm", "entrypoint": "echo.wasm", "protocol": "$JSON_PROTOCOL" },
   "services": ["example:echo-wasm"],
   "capabilities": [],
   "platforms": {
