@@ -1,12 +1,14 @@
 # Executor Registry & Resolution
 
-Status: current, mirrors the implementation on `main` (commit `66bf2a0`).
+Status: current, tracks the runtime-backed executor architecture on the
+`feature/executor-runtime` branch.
 
 This document is the reference for how Neuron handles external executors: how
 a service declares one, how it is found and installed, how it is frozen into a
-Deployment, and how N.O.R.E. eventually runs it — either as a child process or
-as an embedded Wasm module. It is written for whoever works on any layer of
-this stack, including future us, and it answers three questions:
+Deployment, and how N.O.R.E. eventually runs it — either through the process
+runtime (gRPC worker pool or legacy one-shot JSON) or as an embedded Wasm
+module. It is written for whoever works on any layer of this stack, including
+future us, and it answers three questions:
 
 1. What is an executor, and what is a requirement?
 2. How does resolution and installation actually work?
@@ -77,9 +79,11 @@ sides agree on, and it stays dependency-free.
 The value stored in a manifest and in `RuntimeInfo.Type` is one of these
 constants:
 
-- `process` launches the entrypoint as an OS child process.
+- `process` launches the entrypoint as an OS child process. Executors built on
+  the SDK ([packages/executor-go](../../packages/executor-go)) speak gRPC over a Unix domain socket via
+  long-lived worker processes; see the worker pool section below.
 - `wasm` launches the entrypoint inside the embedded WASI runtime, speaking the
-  same protocol as a process executor.
+  stdin/stdout JSON protocol.
 - `container`, `remote`, and older reserved names are rejected by the runtime
   layer with an explicit "unsupported runtime kind" error, rather than being
   silently mis-executed.
@@ -96,26 +100,44 @@ its name, version, runtime, services, capabilities, and per-platform artifacts:
   "apiVersion": "neuron/v1",
   "kind": "Executor",
   "metadata": { "name": "github:read", "version": "1.2.0" },
-  "runtime":  { "type": "process", "entrypoint": "read", "protocol": "neuron/executor-v1" },
+  "runtime":  { "type": "process", "entrypoint": "read", "protocol": "neuron/executor-v1", "maxWorkers": 4 },
   "services": ["read"],
   "capabilities": ["io.read"],
   "platforms": { "linux-amd64": { "artifact": "github-read-linux-amd64", "sha256": "..." } }
 }
 ```
 
+The `protocol` and `maxWorkers` fields of the runtime select the transport and
+worker-pool bound:
+
+- `neuron/executor-v1` — canonical gRPC protocol over Unix domain sockets for
+  process executors. `maxWorkers` bounds the pool of long-lived workers (0 or
+  unset uses the runtime default).
+- `neuron/executor-v1-json` — legacy stdin/stdout JSON protocol, used by WASI
+  executors and by process executors that predate gRPC. `maxWorkers` is ignored.
+
 Validation requires a correct `apiVersion` and `kind`, a non-empty name,
 version, runtime type, entrypoint, and at least one service.
 
 ### The execution protocol
 
-[shared/types/executor/protocol.go](../../shared/types/executor/protocol.go) fixes the wire format for an execution. An
-executor reads one JSON request from stdin, writes one JSON response to stdout,
-and exits. Everything on stderr is diagnostics.
+[shared/types/executor/protocol.go](../../shared/types/executor/protocol.go) fixes the wire data model for an
+execution (`Request` with `Input`, `Response` with `Output`/`Error`). The
+transport that carries it depends on the declared runtime protocol:
+
+For `neuron/executor-v1-json`, an executor reads one JSON request from stdin,
+writes one JSON response to stdout, and exits. Everything on stderr is
+diagnostics.
 
 ```json
 { "input": { "repo": "..." } }
 { "output": { "data": "..." }, "error": "" }
 ```
+
+For `neuron/executor-v1`, the same `Request`/`Response` travel as protobuf
+messages over gRPC ([shared/protocol/executor/v1](../../shared/protocol/executor/v1)), on top of a
+handshake (`Initialize`: protocol version negotiation, executor identity,
+capabilities), `Execute`, `Health`, and `Shutdown` calls.
 
 A non-empty `error` in the response is a controlled failure even when the exit
 code is zero. The runtime injects three environment variables:
@@ -277,34 +299,80 @@ directly: `install`, `list`, `inspect`, and `remove`.
 
 ## Execution inside N.O.R.E.
 
+The full runtime lifecycle is documented in [RUNTIME.md](../RUNTIME.md), with the
+process and WASM backends detailed in [RUNTIME_PROCESS.md](../RUNTIME_PROCESS.md)
+and [RUNTIME_WASM.md](../RUNTIME_WASM.md). This section summarizes the adapter
+flow.
+
 On the N.O.R.E. side, [nore/internal/plugin](../../nore/internal/plugin) adapts frozen executors to the
-in-process `contracts.Executor` contract. `RegisterResolvedExecutors` in
-`process.go` registers an adapter for every frozen type that does not already
-have a core executor — built-ins win, external types become adapters. The
-dispatch in `NewAdapter` reads the runtime kind and builds the matching
-adapter: `process`, `wasm`, or an explicit rejection for anything else.
+in-process `contracts.Executor` contract. `RegisterResolvedExecutors` registers
+an adapter for every frozen type that does not already have a core executor —
+built-ins win, external types become adapters. The dispatch in `NewAdapter`
+reads the runtime kind and hands the frozen record to the matching runtime
+backend through the runtime registry
+([nore/internal/runtime](../../nore/internal/runtime)).
 
 Instances never resolve or install. When `Manager.GetOrCreate` builds an
 Instance ([nore/internal/instance/](../../nore/internal/instance/)), it decodes the opaque
 `ExecutionConfigurations` payload into `[]ResolvedExecutor`, registers the core
 executors, and then the frozen adapters. Execution of a non-core service
-dispatches to its adapter.
+dispatches to its adapter, which proxies to the runtime-backed `Instance`.
 
-### The process adapter
+### Runtime backends
 
-`ProcessAdapter` (`process.go`) spawns the frozen entrypoint as a child process
-per execution, feeds the JSON request to stdin, collects stdout and stderr, and
-honors the context deadline — a timed-out execution is killed and reported. It
-is the reference implementation of the protocol.
+`NewAdapter` picks a backend by the frozen record's runtime kind. The shared
+[shared/types/executor/runtime.go](../../shared/types/executor/runtime.go) contract (`Runtime`, `StartSpec`,
+`Instance`) keeps the plugin layer free of launch machinery; each backend owns
+its own process, socket, or WASM state:
 
-### The Wasm adapter
+- The process runtime ([nore/internal/runtime/process](../../nore/internal/runtime/process)) hosts executors as
+  OS child processes. Two transports are supported, selected by the declared
+  protocol:
+  - `neuron/executor-v1` (canonical): the executor speaks gRPC over a Unix
+    domain socket. The runtime maintains a pool of long-lived worker processes
+    per executor type, leasing requests to available workers, bounded by
+    `maxWorkers`. Workers signal readiness through the
+    `NEURON_EXECUTOR_SOCKET`/`NEURON_EXECUTOR_READY` handshake and negotiate
+    the protocol version during `Initialize`.
+  - `neuron/executor-v1-json` (legacy): the executor speaks the one-shot
+    stdin/stdout JSON protocol. Each execution spawns a fresh process, feeds it
+    the JSON request on stdin, and reads the single JSON response from stdout.
+    This is the transport used by WASI executors and by process executors that
+    predate the gRPC protocol.
+- The WASM runtime ([nore/internal/runtime/wasm](../../nore/internal/runtime/wasm)) runs a frozen `.wasm`
+  module inside the embedded wazero runtime. It speaks the exact same
+  stdin/stdout JSON protocol and injects the three `NEURON_EXECUTOR_*`
+  environment variables through the module configuration.
 
-`WasmAdapter` (`wasm.go`) runs a frozen `.wasm` module inside the embedded
-wazero runtime. It speaks the exact same protocol: JSON request on stdin, JSON
-response on stdout, and the three `NEURON_EXECUTOR_*` environment variables, all
-provided through the module configuration. An executor author therefore compiles
-once to a native binary and once to a `wasm32-wasi` module, and nothing about
-the protocol changes.
+An executor author therefore compiles once to a native binary and once to a
+`wasm32-wasi` module, and the source can remain identical — only the manifest
+protocol field differs, and only process executors that want gRPC must adopt
+the SDK ([packages/executor-go](../../packages/executor-go)).
+
+Container and remote kinds are rejected with an explicit unsupported-runtime
+error rather than silently mis-executed. `SupportedRuntimeKinds()` lists what
+the runtime layer can actually launch.
+
+### The gRPC worker pool
+
+For `neuron/executor-v1`, the process runtime keeps a pool of long-lived
+workers per executor type and version. Work is leased to idle workers; when the
+pool is under `maxWorkers`, a new worker is started. Workers are reused across
+executions (no per-request spawn), which matters because process startup is the
+dominant cost. The pool handles:
+
+- bounded concurrency (`maxWorkers`)
+- health checks
+- worker restart on failure
+- graceful shutdown (`Shutdown` RPC, then process reaping)
+- request cancellation and deadlines through context propagation
+
+The protocol is versioned (`neuron/executor-v1`) and transport-neutral: the
+gRPC schema lives in [shared/protocol/executor/v1](../../shared/protocol/executor/v1). New executor
+languages implement `ExecutorService` over gRPC; they do not need to be Go or
+WASM.
+
+### The Wasm runtime
 
 Two properties matter for how Wasm executors behave at scale.
 
@@ -315,8 +383,8 @@ its entrypoint path, and reused by every subsequent execution and every other
 instance that references the same file. If an Instance declares several `.wasm`
 modules, they are all compiled and all cached independently — the cache holds
 one compiled module per distinct module file, not one module for the whole
-process. This is verified by the plugin integration tests, which register
-multiple distinct modules against the same runtime.
+process. This is verified by the WASM runtime tests, which register multiple
+distinct modules against the same runtime.
 
 Each execution instantiates a fresh, sandboxed module from the shared compiled
 module with its own stdin and stdout buffers, runs `_start`, and tears the
@@ -334,18 +402,22 @@ cannot leak a goroutine or block the process.
 `contracts.ExecutorCloser` in [nore/internal/contracts/executor.go](../../nore/internal/contracts/executor.go) lets an
 adapter release resources. Adapters are registered into a `Registry`
 ([nore/internal/registry/executor-registry.go](../../nore/internal/registry/executor-registry.go)), and `Instance.Stop` closes the
-registry after in-flight work drains. The Wasm adapter's `Close` is a no-op by
-design: it does not own the runtime or its compiled modules, so closing one
-adapter never tears down resources other instances still need. The runtime and
-compiled modules live for the life of the process.
+registry after in-flight work drains. Closing a plugin adapter closes the
+runtime-backed `Instance`: the process pool shuts down workers, while the Wasm
+instance's `Close` is a no-op by design — it does not own the runtime or its
+compiled modules, so closing one adapter never tears down resources other
+instances still need. The Wasm runtime and compiled modules live for the life
+of the process.
 
 ## The example executor
 
 [examples/executors/echo](../../examples/executors/echo) is a stdlib-only Go module that implements the
-protocol: it reads the request, echoes the input back, and reflects the three
-`NEURON_EXECUTOR_*` environment variables into the output. A controlled error is
-produced when the input contains an `error` field, which exercises the
-non-zero/`error` response path without a crash.
+JSON protocol (so it also builds as `wasm32-wasi`): it reads the request,
+echoes the input back, and reflects the three `NEURON_EXECUTOR_*`
+environment variables into the output. A controlled error is produced when the
+input contains an `error` field, which exercises the non-zero/`error` response
+path without a crash. Because it speaks JSON, its manifests declare
+`neuron/executor-v1-json`.
 
 [examples/executors/build.sh](../../examples/executors/build.sh) compiles that single source twice into the catalog
 layout a local registry expects: a native binary for the `process` runtime and a
@@ -361,9 +433,11 @@ conventions are the installer's materialize rules.
 Add an authoring language by implementing `builder.Builder` and registering it
 in the build package. The CLI, the compiler, and the runtime are untouched.
 
-Add a runtime kind by implementing a launch path in [nore/internal/plugin](../../nore/internal/plugin) and
-accepting it in `NewAdapter`; the kind constants already exist in
-[shared/types/executor/runtime.go](../../shared/types/executor/runtime.go). The protocol does not change.
+Add a runtime kind by implementing `shadexec.Runtime` in
+[nore/internal/runtime](../../nore/internal/runtime) and registering the backend in the runtime
+registry used by [nore/internal/plugin](../../nore/internal/plugin). An empty `protocol` on a frozen
+record resolves to `neuron/executor-v1-json` (the legacy JSON transport) so old
+executors keep working unmodified.
 
 Add a core in-process executor by registering it in
 [`nore/internal/registry.RegisterCoreServiceExecutors`](../../nore/internal/registry/executor-registry.go) before the plugin pass; it
@@ -376,12 +450,20 @@ validation, version selection, SHA-256 verification, and the local-registry
 pipeline that walks resolve, install, store, and freeze in a temp directory.
 
 The plugin integration tests ([nore/internal/plugin/plugin_integration_test.go](../../nore/internal/plugin/plugin_integration_test.go))
-build the echo and spin fixtures once per test binary and verify the full
-adapter surface: process and Wasm round-trips with environment capture,
-controlled errors, missing entrypoint and module failures, the timeout path
-against a module that never returns, concurrent executions against the shared
-Wasm runtime, the compiled-module cache across distinct modules, and that an
-adapter close does not hurt the shared runtime.
+build the echo and spin fixtures once per test binary and verify the runtime
+dispatch surface: process and Wasm round-trips with environment capture,
+controlled errors, missing entrypoint failures, frozen-record decode, and
+unknown-runtime rejection.
+
+The runtime tests cover each backend at its own boundary. The process runtime
+tests ([nore/internal/runtime/process/runtime_test.go](../../nore/internal/runtime/process/runtime_test.go)) exercise both
+transports — legacy JSON round-trip and the gRPC worker pool against a
+gRPC test executor, including worker reuse, bounded concurrency, pool close,
+and protocol rejection. The WASM runtime tests
+([nore/internal/runtime/wasm/runtime_test.go](../../nore/internal/runtime/wasm/runtime_test.go)) cover round-trip, the
+timeout path against a module that never returns, concurrent executions against
+the shared wazero runtime, the compiled-module cache across distinct modules,
+and that an instance close does not hurt the shared runtime.
 
 Run them with `go test ./application/... ./nore/... ./shared/...` from the
 repository root, or use [scripts/script.sh](../../scripts/script.sh) for the full workspace build.
