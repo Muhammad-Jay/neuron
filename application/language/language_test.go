@@ -103,6 +103,56 @@ func TestResolveFlagOverridesDetection(t *testing.T) {
 	}
 }
 
+func TestResolveDetectsYAMLProject(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "neuron.yaml"), []byte("apiVersion: neuron/v1\nkind: Project\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := language.Resolve("", "", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != language.YAML {
+		t.Errorf("Resolve = %q, want yaml (bare YAML projects must work without --lang)", got)
+	}
+}
+
+func TestResolveYAMLProjectAliases(t *testing.T) {
+	for _, name := range []string{"neuron.yml", "neuron.config.yaml", "neuron.config.yml", "neuron.config.json"} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := language.Resolve("", "", dir)
+		if err != nil {
+			t.Fatalf("Resolve with %s: %v", name, err)
+		}
+		if got != language.YAML {
+			t.Errorf("Resolve with %s = %q, want yaml", name, got)
+		}
+	}
+}
+
+func TestResolveTypeScriptMarkerWinsOverYAMLConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "neuron.yaml"), []byte("apiVersion: neuron/v1\nkind: Project\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "neuron.config.ts"), []byte("export {}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := language.Resolve("", "", dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != language.TypeScript {
+		t.Errorf("Resolve = %q, want typescript (TS markers win when both are present)", got)
+	}
+}
+
 func TestResolveRequiresLanguage(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := language.Resolve("", "", dir); !errors.Is(err, language.ErrLanguageRequired) {

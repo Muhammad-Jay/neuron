@@ -1,11 +1,11 @@
 {
   "name": "application",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "description": "Neuron application layer: the neuron CLI, compiler, loader, and project toolchain",
   "scripts": {
     "build:cmd": "go build -o ./cmd/neuron ./cmd/neuron"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": ""
+  "author": "Muhammad Jay",
+  "license": "MIT"
 }

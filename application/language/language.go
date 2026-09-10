@@ -65,7 +65,8 @@ func Normalize(s string) (Language, error) {
 
 // Resolve determines the effective project language. The CLI flag wins;
 // otherwise the project configuration value is used, then a heuristic project
-// sniff for TypeScript. Neither present is an error.
+// sniff: TypeScript markers (neuron.config.ts, index.ts) select the SDK, and a
+// YAML project config file selects YAML. Neither present is an error.
 func Resolve(flagValue, configValue, projectDir string) (Language, error) {
 	if strings.TrimSpace(flagValue) != "" {
 		return Normalize(flagValue)
@@ -80,23 +81,41 @@ func Resolve(flagValue, configValue, projectDir string) (Language, error) {
 }
 
 // detectFromProjectDir infers the authoring language from the project root.
+//
 // A TypeScript project is recognized by the neuron-sdk config file
-// (neuron.config.ts/js/mjs) or a conventional index.ts entry point.
+// (neuron.config.ts/js/mjs) or a conventional index.ts entry point and wins
+// when present. Otherwise a YAML project config file (neuron.yaml and its
+// aliases) selects YAML, so plain YAML projects work without --lang or a lang
+// declaration.
 func detectFromProjectDir(projectDir string) (Language, bool) {
 	if projectDir == "" {
 		return "", false
 	}
 
-	markers := []string{
+	tsMarkers := []string{
 		"neuron.config.ts",
 		"neuron.config.js",
 		"neuron.config.mjs",
 		"index.ts",
 	}
 
-	for _, marker := range markers {
+	for _, marker := range tsMarkers {
 		if info, err := os.Stat(filepath.Join(projectDir, marker)); err == nil && !info.IsDir() {
 			return TypeScript, true
+		}
+	}
+
+	yamlMarkers := []string{
+		"neuron.yaml",
+		"neuron.yml",
+		"neuron.config.yaml",
+		"neuron.config.yml",
+		"neuron.config.json",
+	}
+
+	for _, marker := range yamlMarkers {
+		if info, err := os.Stat(filepath.Join(projectDir, marker)); err == nil && !info.IsDir() {
+			return YAML, true
 		}
 	}
 

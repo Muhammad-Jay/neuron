@@ -8,20 +8,22 @@ import (
 	"github.com/Muhammad-Jay/neuron/application/config"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/daemon"
-	"github.com/Muhammad-Jay/neuron/application/internal/cli/execution"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/executor"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/initcmd"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/instance"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/register"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/run"
+	versioncmd "github.com/Muhammad-Jay/neuron/application/internal/cli/version"
+	buildversion "github.com/Muhammad-Jay/neuron/shared/version"
 	"github.com/spf13/cobra"
 )
 
 var cfgFile string
 
 var RootCmd = &cobra.Command{
-	Use:   command.Neuron,
-	Short: "Neuron workflow engine CLI",
+	Use:     command.Neuron,
+	Short:   "Neuron workflow engine CLI",
+	Version: buildversion.String(),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cmd.Help()
 	},
@@ -55,13 +57,13 @@ func init() {
 	RootCmd.AddCommand(
 		run.New(),
 		instance.New(),
-		execution.New(),
 		daemon.New(),
 		initcmd.New(),
 		register.New(),
 		executor.New(),
 		executor.NewAddCmd(),
 		executor.NewRemoveCmd(),
+		versioncmd.New(),
 	)
 }
 

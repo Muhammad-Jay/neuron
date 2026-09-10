@@ -45,7 +45,7 @@ const validateOrder = Service({
   name: "validate-order",
   version: "1.0.0",
   description: "Validate incoming order request",
-}).executor({ name: "set" });
+}).executor({ name: "example:echo" });
 ```
 
 #### Identity
@@ -378,3 +378,14 @@ pnpm typecheck:sdk    # tsc --noEmit
 ```
 
 Tests live in `packages/sdk/test/` and cover services, expressions, composition, connections, schemas, and full system manifests.
+
+## Versioning & compatibility
+
+- Current version: **0.1.0**.
+- The public API surface listed under *Package Exports* is treated as a contract; changes to it are tracked and documented.
+- The SDK is developed in this monorepo and currently consumed from source (`pnpm install` at the workspace root links it). Installation from an npm registry will be enabled as distribution matures.
+- **Language targets:** modern Node.js with full TypeScript 4.7+ support. The SDK builds to ESM and CJS.
+
+## License
+
+[MIT](https://github.com/Muhammad-Jay/neuron/blob/main/LICENSE) — see the repository `LICENSE` for terms.

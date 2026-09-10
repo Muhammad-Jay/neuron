@@ -7,20 +7,21 @@ var (
 
 	Init = "init [Target]"
 
-	Instance = "instance"
-	InstanceList = "list [instance-id]"
+	Instance       = "instance"
+	InstanceList   = "list [instance-id]"
 	InstanceRemove = "remove [instance-id|system-key]"
-	InstanceClear = "clear"
+	InstanceClear  = "clear"
 
 	Register = "register"
 
+	Version = "version"
+
 	Daemon = "daemon"
 
-	Executor      = "executor"
+	Executor        = "executor"
 	ExecutorList    = "list"
 	ExecutorInspect = "inspect [name@version]"
 
-	Add = "add [name@version]"
+	Add    = "add [name@version]"
 	Remove = "remove [name@version]"
 )
-

@@ -1,12 +1,12 @@
 {
-  "name": "nore/cmd",
-  "version": "1.0.0",
+  "name": "nore",
+  "version": "0.1.0",
+  "description": "N.O.R.E. — Neuron Operational Runtime Engine daemon",
   "scripts": {
     "build:nore": "go build -o ./nore/nore-daemon ./nore",
     "run:nore": "nore/nore-daemon"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": ""
+  "author": "Muhammad Jay",
+  "license": "MIT"
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage"
 	"github.com/Muhammad-Jay/neuron/nore/internal/storage/sqlite"
 	"github.com/Muhammad-Jay/neuron/nore/internal/system"
+	"github.com/Muhammad-Jay/neuron/shared/version"
 )
 
 func main() {
@@ -26,13 +27,20 @@ func main() {
 		socket  string
 		workers int
 		dataDir string
+		showVer bool
 	)
 
-	flag.StringVar(&port, "port", ":7432", "TCP address for the N.O.R.E. API; empty disables TCP")
+	flag.StringVar(&port, "port", "", "TCP address for the N.O.R.E. API; empty disables TCP (default: Unix socket only)")
 	flag.StringVar(&socket, "socket", defaultSocket(), "Unix socket for local CLI clients; empty disables Unix socket")
 	flag.IntVar(&workers, "workers", 8, "executor worker count")
 	flag.StringVar(&dataDir, "data-dir", defaultDataDir(), "persistent data directory")
+	flag.BoolVar(&showVer, "version", false, "print the N.O.R.E. version and exit")
 	flag.Parse()
+
+	if showVer {
+		fmt.Println(version.String())
+		return
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -110,6 +118,10 @@ func main() {
 		for _, entry := range listeners {
 			_ = entry.l.Close()
 		}
+		// Gracefully stop all live instances so executor-backed resources
+		// (worker processes and WASM modules) receive a clean shutdown instead
+		// of being torn down by process exit.
+		srv.StopInstances()
 	case err := <-errCh:
 		for _, entry := range listeners {
 			_ = entry.l.Close()

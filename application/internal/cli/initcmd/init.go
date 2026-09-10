@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/config"
@@ -61,11 +60,6 @@ func createConfigFile(path string) error {
 		return fmt.Errorf("expected a directory path, but received an empty string")
 	}
 
-	parent, err := filepath.Abs(path)
-	if err != nil {
-		return err
-	}
-
 	fullPath := filepath.Join(path, config.NeuronConfigFileName)
 
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
@@ -77,7 +71,7 @@ func createConfigFile(path string) error {
 		}
 		defer file.Close()
 
-		content := strings.Replace(config.NeuronConfigDefaultTemplate, "$", parent, 1)
+		content := config.NeuronConfigDefaultTemplate(filepath.Base(path))
 		if _, err := file.Write([]byte(content)); err != nil {
 			return err
 		}

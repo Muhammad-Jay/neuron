@@ -92,9 +92,9 @@ type ConnectorValidationRule struct {
 // ConnectorReference references a connector definition (inline or via entry).
 type ConnectorReference struct {
 	// Inline definition
-	From        string                   `yaml:"from"`
-	To          string                   `yaml:"to"`
-	Mappings    []MappingDefinition      `yaml:"mappings,omitempty"`
+	From        string                    `yaml:"from"`
+	To          string                    `yaml:"to"`
+	Mappings    []MappingDefinition       `yaml:"mappings,omitempty"`
 	Validations []ConnectorValidationRule `yaml:"validations,omitempty"`
 
 	// External reference
@@ -108,9 +108,9 @@ type ConnectorFile struct {
 
 	Metadata ConnectorMetadata `yaml:"metadata"`
 
-	From        string                   `yaml:"from"`
-	To          string                   `yaml:"to"`
-	Mappings    []MappingDefinition      `yaml:"mappings,omitempty"`
+	From        string                    `yaml:"from"`
+	To          string                    `yaml:"to"`
+	Mappings    []MappingDefinition       `yaml:"mappings,omitempty"`
 	Validations []ConnectorValidationRule `yaml:"validations,omitempty"`
 }
 
@@ -256,7 +256,7 @@ type ExecutionConfig struct {
 // They are not interpreted by the project resolver.
 type RuntimeConfig struct {
 	Execution RuntimeExecutionConfig `yaml:"execution,omitempty"`
-	Workers   WorkerConfig            `yaml:"workers,omitempty"`
+	Workers   WorkerConfig           `yaml:"workers,omitempty"`
 }
 
 type RuntimeExecutionConfig struct {
@@ -316,6 +316,6 @@ type ExecutorRegistry struct {
 //
 
 type InspectorConfig struct {
-	Enabled bool `yaml:"enabled,omitempty"`
+	Enabled bool   `yaml:"enabled,omitempty"`
 	Address string `yaml:"address,omitempty"`
 }

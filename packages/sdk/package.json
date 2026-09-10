@@ -2,6 +2,13 @@
   "name": "@neuron/sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for defining Neuron systems",
+  "license": "MIT",
+  "author": "Muhammad Jay",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Muhammad-Jay/neuron.git",
+    "directory": "packages/sdk"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -20,6 +27,8 @@
   ],
   "scripts": {
     "build": "tsup",
+    "prepack": "pnpm build",
+    "prepublishOnly": "pnpm build",
     "lint": "eslint . --max-warnings 0",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",

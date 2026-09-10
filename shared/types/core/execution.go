@@ -1,6 +1,6 @@
 package core
 
-const  (
-	ExecutionModeWait = "wait"
-	ExecutionModeDetach   = "detach"
+const (
+	ExecutionModeWait   = "wait"
+	ExecutionModeDetach = "detach"
 )

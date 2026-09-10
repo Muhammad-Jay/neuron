@@ -5,8 +5,8 @@ import "os"
 type Command struct {
 	Path string
 	Args []string
-	Dir string
-	Env []string
+	Dir  string
+	Env  []string
 }
 
 type Process struct {
@@ -18,7 +18,7 @@ func NewProcess(cmd Command) *Process {
 		cmd.Dir = getWorkingDirectory()
 	}
 
-	return &Process{ Cmd: cmd }
+	return &Process{Cmd: cmd}
 }
 
 func getWorkingDirectory() string {

@@ -32,9 +32,9 @@ func testManifest() *manifest.System {
 					Version:  "latest",
 					Registry: "local",
 				},
-				Inputs: []manifest.Port{{Name: "input", Type: "object", Required: true}},
+				Inputs:  []manifest.Port{{Name: "input", Type: "object", Required: true}},
 				Outputs: []manifest.Port{{Name: "output", Type: "object", Required: true}},
-				Config: map[string]any{"foo": "bar"},
+				Config:  map[string]any{"foo": "bar"},
 			},
 			{
 				Name: "process",

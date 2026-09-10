@@ -46,9 +46,9 @@ func SystemKey(system core.System, env string) (InstanceKey, error) {
 }
 
 type normalizedSystem struct {
-	Metadata    normalizedMetadata  `json:"metadata"`
-	Services    []normalizedService `json:"services"`
-	Connectors  []normalizedConnector `json:"connectors"`
+	Metadata   normalizedMetadata    `json:"metadata"`
+	Services   []normalizedService   `json:"services"`
+	Connectors []normalizedConnector `json:"connectors"`
 }
 
 type normalizedMetadata struct {
@@ -59,20 +59,20 @@ type normalizedMetadata struct {
 }
 
 type normalizedService struct {
-	ID          string                          `json:"id"`
-	Type        core.ServiceType                `json:"type"`
-	Config      map[string]any                  `json:"config"`
-	Inputs      []core.Port                     `json:"inputs,omitempty"`
-	Outputs     []core.Port                     `json:"outputs,omitempty"`
-	Timeout     string                          `json:"timeout,omitempty"`
-	MaxAttempts int                             `json:"max_attempts,omitempty"`
-	Backoff     string                          `json:"backoff,omitempty"`
+	ID          string           `json:"id"`
+	Type        core.ServiceType `json:"type"`
+	Config      map[string]any   `json:"config"`
+	Inputs      []core.Port      `json:"inputs,omitempty"`
+	Outputs     []core.Port      `json:"outputs,omitempty"`
+	Timeout     string           `json:"timeout,omitempty"`
+	MaxAttempts int              `json:"max_attempts,omitempty"`
+	Backoff     string           `json:"backoff,omitempty"`
 }
 
 type normalizedConnector struct {
-	From        string          `json:"from"`
-	To          string          `json:"to"`
-	Mappings    []core.MappingRule `json:"mappings,omitempty"`
+	From        string                `json:"from"`
+	To          string                `json:"to"`
+	Mappings    []core.MappingRule    `json:"mappings,omitempty"`
 	Validations []core.ValidationRule `json:"validations,omitempty"`
 }
 

@@ -31,7 +31,6 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		BinaryPath:     "nore-daemon",
-		Args:           []string{"serve"},
 		StartTimeout:   10 * time.Second,
 		HealthInterval: 100 * time.Millisecond,
 		AttachOutput:   true,
@@ -41,7 +40,7 @@ func DefaultConfig() Config {
 
 // ConfigFromEffective builds a daemon Config from the effective Neuron
 // configuration. It translates the config's daemon/storage/runtime settings
-// into the `nore serve` flags the daemon process accepts.
+// into the `nore` flags the daemon process accepts.
 //
 // Cross-module note: `nore` is a separate binary, so the effective config must
 // reach it through process flags rather than shared types.

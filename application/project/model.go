@@ -11,9 +11,13 @@ import "time"
 // The next layer can transform this into:
 //
 // ResolvedProject
-//       ↓
+//
+//	↓
+//
 // SystemParser
-//       ↓
+//
+//	↓
+//
 // core.System
 type ResolvedProject struct {
 	FormatVersion string `json:"formatVersion"`
@@ -65,11 +69,11 @@ type ResolvedService struct {
 //
 // This is useful later for:
 //
-//   executor install
-//   executor resolve
-//   executor registry
-//   container preparation
-//   remote executor discovery
+//	executor install
+//	executor resolve
+//	executor registry
+//	container preparation
+//	remote executor discovery
 type ExecutorRequirement struct {
 	Type    string `json:"type"`
 	Version string `json:"version,omitempty"`
@@ -86,7 +90,6 @@ type ResolvedSourceFile struct {
 
 	SHA256 string `json:"sha256"`
 }
-
 
 func collectExecutorRequirements(
 	services []ResolvedService,

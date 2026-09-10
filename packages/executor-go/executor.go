@@ -1,28 +1,31 @@
 // Package executor provides the Go SDK for implementing Neuron executors.
 //
 // Executor authors implement the Handler interface and call Serve to start
-// their executor as a gRPC server. The SDK handles protocol negotiation,
-// transport setup (Unix domain sockets), and lifecycle management.
+// their executor. The SDK handles protocol negotiation, transport setup, and
+// lifecycle management.
 //
 // Example:
 //
 //	func main() {
-//	    executor.Serve(executor.HandlerFunc{
-//	        Initialize: func(ctx context.Context, req *v1.InitializeRequest) (*v1.InitializeResponse, error) {
-//	            return &v1.InitializeResponse{
-//	                ProtocolVersion: shadexec.ProtocolV1,
-//	            }, nil
-//	        },
-//	        Execute: func(ctx context.Context, in map[string]any) (map[string]any, error) {
-//	            return in, nil
-//	        },
-//	    })
+//		err := executor.Serve(executor.Handler{
+//			Initialize: func(ctx context.Context, protocol string, metadata map[string]string) (*executor.InitializeResult, error) {
+//				return &executor.InitializeResult{ProtocolVersion: shadexec.ProtocolV1}, nil
+//			},
+//			Execute: func(ctx context.Context, in map[string]any) (map[string]any, error) {
+//				return in, nil
+//			},
+//		})
+//		if err != nil {
+//			os.Exit(1)
+//		}
 //	}
 //
 // The SDK supports two transports:
 //
-//  1. gRPC over Unix domain sockets (default, for long-lived process executors)
-//  2. stdin/stdout JSON (when NEURON_EXECUTOR_SOCKET is not set)
+//  1. gRPC over Unix domain sockets (when NEURON_EXECUTOR_SOCKET is set —
+//     the long-lived worker mode used by the process runtime backend)
+//  2. stdin/stdout JSON (when NEURON_EXECUTOR_SOCKET is not set — the
+//     one-shot mode used by WASM executors and single-execution processes)
 //
 // The transport is selected automatically based on the environment provided
 // by N.O.R.E. This means the same executor binary works both as a long-lived

@@ -15,8 +15,8 @@ func Service(
 			ID:   core.ID(id),
 			Name: id,
 		},
-		Type: serviceType,
-		Inputs: make([]core.Port, 0),
+		Type:    serviceType,
+		Inputs:  make([]core.Port, 0),
 		Outputs: make([]core.Port, 0),
 		ServiceConfigurations: make(
 			core.ServiceConfigurations,

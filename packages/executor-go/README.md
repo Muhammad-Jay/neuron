@@ -240,3 +240,7 @@ See the runtime documentation for the full contract and lifecycle.
 - `docs/RUNTIME_WASM.md` — the WASM runtime
 - `docs/executors/2026-09-05-executor-registry-and-resolution.md` — packages, resolution, and the package archive
 - `examples/executors/` — reference executor sources and its build script
+
+## License
+
+MIT — see the repository [`LICENSE`](../../LICENSE) for terms.

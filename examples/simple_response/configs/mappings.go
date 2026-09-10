@@ -4,6 +4,7 @@ import (
 	"github.com/Muhammad-Jay/neuron/application/sdk"
 	"github.com/Muhammad-Jay/neuron/shared/types/core"
 )
+
 type mappingGroups struct {
 	HTTPToAI     []core.MappingRule
 	AIToCommand  []core.MappingRule

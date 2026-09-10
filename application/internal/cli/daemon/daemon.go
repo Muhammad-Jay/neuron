@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	noredaemon "github.com/Muhammad-Jay/neuron/application/daemon"
 	"github.com/Muhammad-Jay/neuron/application/config"
+	noredaemon "github.com/Muhammad-Jay/neuron/application/daemon"
 	"github.com/Muhammad-Jay/neuron/application/internal/cli/command"
 	"github.com/spf13/cobra"
 )

@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go workspace
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache: true
+
+      - name: Formatting
+        run: |
+          files="$(gofmt -l nore application shared packages/executor-go examples/simple_response)"
+          if [ -n "$files" ]; then
+            echo "gofmt required on:"; echo "$files"; exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./nore/... ./application/... ./shared/... ./packages/executor-go/... ./examples/simple_response/...
+
+      - name: Test
+        run: go test ./nore/... ./application/... ./shared/... ./packages/executor-go/... ./examples/simple_response/...
+
+      - name: Build
+        run: go build ./nore/... ./application/... ./shared/... ./packages/executor-go/... ./examples/simple_response/...
+
+  sdk:
+    name: TypeScript SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10.33.0"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK
+        run: pnpm --filter @neuron/sdk build
+
+      - name: Test SDK
+        run: pnpm --filter @neuron/sdk test
+
+      - name: Typecheck SDK
+        run: pnpm --filter @neuron/sdk typecheck
+
+      - name: Lint SDK
+        run: pnpm --filter @neuron/sdk lint
+
+      - name: Typecheck example project
+        run: pnpm --filter ecommerce-order-ts typecheck
+
+  release-validation:
+    name: Release build matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache: true
+
+      - name: Build and package all release targets
+        run: ./scripts/release.sh --version v0.0.0-ci --out "$RUNNER_TEMP/dist"
+
+      - name: Upload packaged artifacts (CI preview)
+        uses: actions/upload-artifact@v4
+        with:
+          name: neuron-ci-preview
+          path: ${{ runner.temp }}/dist/v0.0.0-ci
+          if-no-files-found: error

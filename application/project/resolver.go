@@ -18,18 +18,18 @@ import (
 //
 // It knows:
 //
-//   neuron.yaml
-//   systems YAML
-//   service YAML
-//   entry references
+//	neuron.yaml
+//	systems YAML
+//	service YAML
+//	entry references
 //
 // It does not know:
 //
-//   core.System
-//   planner
-//   runtime
-//   executors
-//   instances
+//	core.System
+//	planner
+//	runtime
+//	executors
+//	instances
 type Resolver struct {
 	root string
 
@@ -82,12 +82,18 @@ func (r *Resolver) Root() string {
 // This performs:
 //
 // neuron.yaml
-//     ↓
+//
+//	↓
+//
 // System
-//     ↓
+//
+//	↓
+//
 // Services
-//     ↓
-// Service entry references
+//
+//	↓
+//
+// # Service entry references
 //
 // and produces a ResolvedProject.
 func (r *Resolver) ResolveProject() (*ResolvedProject, error) {
@@ -141,7 +147,7 @@ func (r *Resolver) ResolveProject() (*ResolvedProject, error) {
 
 	return &ResolvedProject{
 		FormatVersion: "v1",
-		ResolvedAt:   nowUTC(),
+		ResolvedAt:    nowUTC(),
 
 		Project: project,
 
@@ -239,9 +245,9 @@ func (r *Resolver) resolveSystem(
 		resolved.Services = append(
 			resolved.Services,
 			ResolvedService{
-				Ref:          ref.Ref,
-				SourcePath:   displayPath(r.root, servicePath),
-				Definition:   *service,
+				Ref:        ref.Ref,
+				SourcePath: displayPath(r.root, servicePath),
+				Definition: *service,
 			},
 		)
 	}
