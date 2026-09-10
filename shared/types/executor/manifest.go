@@ -12,7 +12,10 @@
 // sides agree on so the runtime never needs to import registry code.
 package executor
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Protocol identifiers for the executor runtime handshake.
 const (
@@ -40,7 +43,31 @@ const (
 	// InstallFile is the installation record written into an installed
 	// executor directory after a verified, atomic install.
 	InstallFile = "install.json"
+
+	// ExecutorPlatformWasm is the portable platform key for WASM executor
+	// artifacts in a manifest's platforms map. It names the platform by its
+	// execution boundary rather than a host GOOS-GOARCH pair, because a WASI
+	// module runs on any host. All other platform keys are Neuron-owned
+	// GOOS-GOARCH ids (e.g. "linux-amd64") naming native process artifacts.
+	ExecutorPlatformWasm = "wasm32-wasi"
+
+	// PackageArchiveSuffix is the canonical suffix of the executor package
+	// archive asset: <name>-<version>-executor.neuron.tar.gz. A package
+	// archive is a single immutable artifact containing executor.json at its
+	// root plus every platform artifact referenced by the manifest. Registries
+	// prefer it over per-platform assets; the manifest inside the archive is
+	// authoritative.
+	PackageArchiveSuffix = "-executor.neuron.tar.gz"
 )
+
+// PackageArchiveName returns the canonical name of the executor package
+// archive for a type and version: <name>-<version>-executor.neuron.tar.gz
+// with ':' and '/' replaced by '-'. The name is informational only; the
+// manifest inside the archive is authoritative for identity and content.
+func PackageArchiveName(name, version string) string {
+	clean := strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(name), ":", "-"), "/", "-")
+	return clean + "-" + strings.TrimSpace(version) + PackageArchiveSuffix
+}
 
 // Manifest is the executor.json package manifest. It describes one immutable
 // executor artifact: what it is, what runtime launches it, which services it

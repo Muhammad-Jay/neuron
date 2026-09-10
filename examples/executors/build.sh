@@ -5,6 +5,11 @@
 #   catalog/example/echo/1.0.0/         process-runtime executor
 #   catalog/example/echo-wasm/1.0.0/    wasm-runtime executor
 #
+# Each version directory also receives its canonical executor package archive
+# (<name>-<version>-executor.neuron.tar.gz): a single immutable artifact that
+# registries prefer over per-platform assets because it carries executor.json
+# plus every platform binary referenced by it.
+#
 # Both are compiled from the same source in ./echo. Generated binaries are
 # gitignored; re-run this script after changing the source or to rebuild.
 set -euo pipefail
@@ -65,14 +70,20 @@ cat > "$wasm_dir/executor.json" <<EOF
   "runtime": { "type": "wasm", "entrypoint": "echo.wasm", "protocol": "$JSON_PROTOCOL" },
   "services": ["example:echo-wasm"],
   "capabilities": [],
-  "platforms": {
-    "linux-amd64":   { "artifact": "echo.wasm" },
-    "linux-arm64":   { "artifact": "echo.wasm" },
-    "darwin-amd64":  { "artifact": "echo.wasm" },
-    "darwin-arm64":  { "artifact": "echo.wasm" },
-    "windows-amd64": { "artifact": "echo.wasm" }
-  }
+  "platforms": { "wasm32-wasi": { "artifact": "echo.wasm" } }
 }
 EOF
+
+# Canonical executor package archives: executor.json plus the platform binary,
+# with the files at the archive root (no wrapping directory). Registries
+# resolve these as the preferred single-asset distribution. The archive is
+# staged outside the scanned directory so tar never reads a dir it mutates.
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+
+tar -C "$echo_dir" -czf "$stage/example-echo-1.0.0-executor.neuron.tar.gz" .
+mv "$stage/example-echo-1.0.0-executor.neuron.tar.gz" "$echo_dir/"
+tar -C "$wasm_dir" -czf "$stage/example-echo-wasm-1.0.0-executor.neuron.tar.gz" .
+mv "$stage/example-echo-wasm-1.0.0-executor.neuron.tar.gz" "$wasm_dir/"
 
 echo "Built example executors into $CATALOG"

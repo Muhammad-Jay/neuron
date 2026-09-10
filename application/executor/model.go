@@ -85,6 +85,18 @@ func HostPlatform() string {
 	return runtime.GOOS + "-" + runtime.GOARCH
 }
 
+// PlatformForRuntime returns the platform key under which an executor of the
+// given runtime kind is selected from a manifest's platforms map. WASM
+// modules are portable and use the single "wasm32-wasi" key; every other
+// kind binds the host's native GOOS-GOARCH key because a frozen artifact is
+// always installed and executed on the machine running N.O.R.E.
+func PlatformForRuntime(runtimeType string) string {
+	if runtimeType == shadexec.RuntimeKindWasm {
+		return shadexec.ExecutorPlatformWasm
+	}
+	return HostPlatform()
+}
+
 // Installed is a locally installed, immutable executor artifact living in the
 // executor store (~/.neuron/executors/...). It is the materialized result of
 // installing a Package: a verified, atomically renamed directory.

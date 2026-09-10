@@ -119,6 +119,58 @@ worker-pool bound:
 Validation requires a correct `apiVersion` and `kind`, a non-empty name,
 version, runtime type, entrypoint, and at least one service.
 
+The `platforms` keys are selected by the executor's runtime kind, not by the
+host on its own. A `process` executor is always installed and executed on the
+machine running N.O.R.E., so its artifact is bound under the host's native
+GOOS-GOARCH key (`linux-amd64`, ...). A WASM executor has no host affinity — a
+modular WASI artifact runs on every host — so it is bound under the single
+portable key `wasm32-wasi` regardless of where N.O.R.E. runs. `PlatformForRuntime`
+in [application/executor/model.go](../../application/executor/model.go) is the one authoritative mapping.
+
+### The executor package archive
+
+The canonical distribution unit of an external executor is the **executor
+package archive**: a single gzip tarball named
+`<name>-<version>-executor.neuron.tar.gz` (e.g.
+`example-echo-1.0.0-executor.neuron.tar.gz`, built from the type and version by
+`PackageArchiveName` in [shared/types/executor/manifest.go](../../shared/types/executor/manifest.go)). It contains
+`executor.json` plus every platform artifact the manifest references, with the
+files at the archive root:
+
+```text
+example-echo-1.0.0-executor.neuron.tar.gz
+├── executor.json
+└── example-echo-1.0.0-linux-amd64   (or echo.wasm, ...)
+```
+
+The manifest inside the archive is authoritative. The name's embedded identity
+is informational and there for humans; if the manifest's `name` or `version`
+disagrees with the resolved package identity, the installer rejects the archive
+as a foreign artifact.
+
+Registries prefer the package archive over per-platform assets:
+
+- The GitHub provider ([application/executor/source/github/package.go](../../application/executor/source/github/package.go)) binds the
+  `<type>-<version>-executor.neuron.tar.gz` release asset directly and needs no
+  separate `executor.json` fetch. When no archive exists it falls back to the
+  legacy flow: fetch `executor.json` (release asset, then raw repository file at
+  the tag) and bind the single platform artifact for the executor's runtime
+  kind.
+- The local registry ([application/executor/source/local/registry.go](../../application/executor/source/local/registry.go)) uses the
+  archive when one sits in the version directory; otherwise it binds the
+  per-platform artifact.
+
+At install time ([application/executor/installer.go](../../application/executor/installer.go)) the archive is
+downloaded, its SHA-256 verified when the manifest declares one (a freshly
+derived digest otherwise), extracted, and validated. Two invariants are
+enforced against the materialized payload:
+
+- The entrypoint's byte header must agree with its runtime kind: a `wasm`
+  runtime must back a `\0asm` module and a `process` runtime must not
+  (`assertRuntimeConsistency`).
+- The installed record stores the platform key that `PlatformForRuntime`
+  selected, so `install.json` states exactly which artifact was materialized.
+
 ### The execution protocol
 
 [shared/types/executor/protocol.go](../../shared/types/executor/protocol.go) fixes the wire data model for an
@@ -422,13 +474,19 @@ path without a crash. Because it speaks JSON, its manifests declare
 [examples/executors/build.sh](../../examples/executors/build.sh) compiles that single source twice into the catalog
 layout a local registry expects: a native binary for the `process` runtime and a
 `wasm32-wasi` module for the `wasm` runtime, each with its own `executor.json`.
-The generated catalog is gitignored; rerun the script after changing the source.
+Each version directory also receives its canonical executor package archive
+(`example-echo-1.0.0-executor.neuron.tar.gz` and
+`example-echo-wasm-1.0.0-executor.neuron.tar.gz`), which the local registry
+prefers as its payload. The generated catalog is gitignored; rerun the script
+after changing the source.
 
 ## Extending
 
 Add a registry provider by implementing `Provider` (`Name`, `Types`, `Versions`,
 `Package`) and registering it in `executorctl.BuildCatalog`. Distribution
-conventions are the installer's materialize rules.
+conventions are the installer's materialize rules; the canonical package
+archive (`<name>-<version>-executor.neuron.tar.gz`) is the shared unit every
+provider should prefer and the installer already understands.
 
 Add an authoring language by implementing `builder.Builder` and registering it
 in the build package. The CLI, the compiler, and the runtime are untouched.

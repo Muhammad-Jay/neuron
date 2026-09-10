@@ -310,6 +310,15 @@ selects the transport, and `maxWorkers` (optional) bounds the worker pool for
 process executors. Validation requires a correct `apiVersion` and `kind`, a
 name, a version, a runtime type, an entrypoint, and at least one service.
 
+`platforms` keys are selected by the runtime kind: process executors bind the
+host's native key (`linux-amd64`, ...) because the artifact runs on the N.O.R.E.
+machine, while WASM executors bind the portable `wasm32-wasi` key. The mapping
+lives in one place, `PlatformForRuntime` (`application/executor/model.go`). The
+preferred distribution unit is the executor package archive
+(`<name>-<version>-executor.neuron.tar.gz`) carrying `executor.json` plus every
+platform artifact; registries prefer it over per-platform assets and the
+installer reconciles its inner manifest against the resolved identity.
+
 Manifests declare the protocol honestly:
 
 - a gRPC-capable process executor declares `neuron/executor-v1`;

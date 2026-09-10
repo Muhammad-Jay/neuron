@@ -91,25 +91,53 @@ func (r *Registry) Package(ctx context.Context, typ, version string) (*executor.
 		return nil, err
 	}
 
+	// The standalone executor.json is optional when the version directory
+	// ships an executor package archive; the archive's inner manifest is then
+	// authoritative and reconciled at install time.
 	manifestPath := filepath.Join(versionDir, shadexec.ManifestFile)
 	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, executor.ErrNotFound
+	var m *shadexec.Manifest
+	if err == nil {
+		m, err = executor.ParseManifest(data)
+		if err != nil {
+			return nil, err
 		}
+	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
 
-	m, err := executor.ParseManifest(data)
-	if err != nil {
-		return nil, err
+	pkg := &executor.Package{Type: typ, Version: version, Registry: r.Name()}
+	if m != nil {
+		pkg.Manifest = data
+		pkg.Description = m.Metadata.Description
+		pkg.Runtime = executor.RuntimeSpec{
+			Type:       m.Runtime.Type,
+			Entrypoint: m.Runtime.Entrypoint,
+			Protocol:   m.Runtime.Protocol,
+			MaxWorkers: m.Runtime.MaxWorkers,
+		}
+		pkg.Capabilities = m.Capabilities
+		pkg.Services = m.Services
+		pkg.Platforms = m.Platforms
 	}
 
-	pkg := executor.PackageFromManifest(m, r.Name(), version)
-	pkg.Manifest = data
+	// The executor package archive is the preferred payload: one file that
+	// installs the whole executor. Prefer the exact <type>-<version> name,
+	// then any canonical archive in the version directory.
+	if archive, ok := archivePayload(versionDir, typ, version); ok {
+		pkg.Artifact = executor.Artifact{
+			URL:  "file://" + filepath.ToSlash(archive),
+			Name: filepath.Base(archive),
+		}
+		return pkg, nil
+	}
 
-	// Bind the host-platform artifact if the package directory ships one.
-	if platform, ok := m.Platforms[executor.HostPlatform()]; ok && platform.Artifact != "" {
+	if m == nil {
+		return nil, executor.ErrNotFound
+	}
+
+	// No archive: bind the platform artifact for the executor's runtime kind.
+	if platform, ok := m.Platforms[executor.PlatformForRuntime(m.Runtime.Type)]; ok && platform.Artifact != "" {
 		artifactPath := filepath.Join(versionDir, platform.Artifact)
 		if info, err := os.Stat(artifactPath); err == nil && !info.IsDir() {
 			pkg.Artifact = executor.Artifact{
@@ -121,6 +149,29 @@ func (r *Registry) Package(ctx context.Context, typ, version string) (*executor.
 	}
 
 	return pkg, nil
+}
+
+// archivePayload finds the canonical executor package archive in dir,
+// preferring <type>-<version>-executor.neuron.tar.gz then any asset carrying
+// the canonical package archive suffix.
+func archivePayload(dir, typ, version string) (string, bool) {
+	exact := filepath.Join(dir, shadexec.PackageArchiveName(typ, version))
+	if info, err := os.Stat(exact); err == nil && !info.IsDir() {
+		return exact, true
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(e.Name(), shadexec.PackageArchiveSuffix) {
+			return filepath.Join(dir, e.Name()), true
+		}
+	}
+	return "", false
 }
 
 func (r *Registry) typeDir(typ string) (string, error) {

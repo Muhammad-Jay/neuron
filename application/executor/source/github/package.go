@@ -7,14 +7,36 @@ import (
 	"strings"
 
 	"github.com/Muhammad-Jay/neuron/application/executor"
+	shadexec "github.com/Muhammad-Jay/neuron/shared/types/executor"
 )
 
 // manifestAssetName is the preferred executor.json location inside a release.
 const manifestAssetName = "executor.json"
 
-// buildPackage assembles an executor.Package for one release: it reads the
-// executor.json manifest (release asset, falling back to the raw repository
-// file at the release tag), then binds the host-platform binary asset.
+// packageArchiveAsset finds the executor package archive asset in a release.
+// The exact <type>-<version>-executor.neuron.tar.gz name wins; otherwise any
+// asset carrying the canonical package archive suffix is accepted, trusting
+// the manifest inside the archive to reconcile identity at install time.
+func packageArchiveAsset(release *Release, typ, version string) (Asset, bool) {
+	if asset, ok := release.assetByName(shadexec.PackageArchiveName(typ, version)); ok {
+		return asset, true
+	}
+	for _, a := range release.Assets {
+		if strings.HasSuffix(a.Name, shadexec.PackageArchiveSuffix) {
+			return a, true
+		}
+	}
+	return Asset{}, false
+}
+
+// buildPackage assembles an executor.Package for one release. The executor
+// package archive (<type>-<version>-executor.neuron.tar.gz) is the preferred
+// distribution: one immutable asset containing executor.json plus every
+// platform artifact. Its inner manifest is authoritative, so no separate
+// manifest fetch happens here and identity/version are reconciled at install
+// time. When no package archive exists, the manifest is read from the release
+// (asset, then raw repository file) and the platform artifact for the
+// executor's runtime kind is bound.
 func (r *Registry) buildPackage(
 	ctx context.Context,
 	typ, version string,
@@ -22,6 +44,20 @@ func (r *Registry) buildPackage(
 	release *Release,
 ) (*executor.Package, error) {
 
+	// Package archive distribution.
+	if asset, ok := packageArchiveAsset(release, typ, version); ok {
+		return &executor.Package{
+			Type:     typ,
+			Version:  version,
+			Registry: r.Name(),
+			Artifact: executor.Artifact{
+				URL:  asset.BrowserDownloadURL,
+				Name: asset.Name,
+			},
+		}, nil
+	}
+
+	// Legacy per-platform distribution.
 	manifestBytes, source, err := r.fetchManifest(ctx, ref, release)
 	if err != nil {
 		return nil, err
@@ -49,8 +85,10 @@ func (r *Registry) buildPackage(
 	pkg := executor.PackageFromManifest(m, r.Name(), version)
 	pkg.Manifest = manifestBytes
 
-	// Bind the host-platform artifact when the manifest describes one.
-	if platform, ok := m.Platforms[executor.HostPlatform()]; ok && platform.Artifact != "" {
+	// Bind the platform artifact for the executor's runtime kind. WASM modules
+	// select the "wasm32-wasi" key; process executors select the host key.
+	platformKey := executor.PlatformForRuntime(m.Runtime.Type)
+	if platform, ok := m.Platforms[platformKey]; ok && platform.Artifact != "" {
 		if asset, found := release.assetByName(platform.Artifact); found {
 			pkg.Artifact = executor.Artifact{
 				URL:    asset.BrowserDownloadURL,

@@ -1,8 +1,10 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,10 +71,29 @@ func (i *Installer) Install(ctx context.Context, pkg *Package) (*InstallResult, 
 		return nil, err
 	}
 
+	// When the payload is a package archive and no separate manifest was
+	// fetched from the registry, the executor.json inside the archive is
+	// authoritative. Reconcile it with the identity resolved from the
+	// registry so a mismatched asset cannot masquerade as another executor.
+	if pkg.Manifest == nil {
+		if m.Metadata.Name != "" && m.Metadata.Name != pkg.Type {
+			return nil, fmt.Errorf("%w: package archive carries executor %q, require %q", ErrManifestInvalid, m.Metadata.Name, pkg.Type)
+		}
+		if m.Metadata.Version != "" && !versionMatches(m.Metadata.Version, pkg.Version) {
+			return nil, fmt.Errorf("%w: package archive declares version %q, require %q", ErrManifestInvalid, m.Metadata.Version, pkg.Version)
+		}
+	}
+
 	// 3. Resolve the concrete entrypoint (may differ from the package manifest
 	// when the payload is a single binary rather than a pre-extracted dir).
 	entrypoint, err := i.resolveEntrypoint(pkg, stage, m.Runtime.Entrypoint)
 	if err != nil {
+		return nil, err
+	}
+
+	// 3.5. The materialized entrypoint must agree with the declared runtime
+	// type so a mismatched package is rejected before any execution.
+	if err := assertRuntimeConsistency(stage, m.Runtime.Type, entrypoint); err != nil {
 		return nil, err
 	}
 
@@ -82,7 +103,7 @@ func (i *Installer) Install(ctx context.Context, pkg *Package) (*InstallResult, 
 		Version:      pkg.Version,
 		Digest:       pkg.Digest,
 		Registry:     pkg.Registry,
-		Platform:     HostPlatform(),
+		Platform:     PlatformForRuntime(m.Runtime.Type),
 		RootDir:      stage,
 		ManifestPath: manifestPath,
 		ArtifactPath: stage,
@@ -259,4 +280,44 @@ func fileNameOf(pkg *Package) string {
 		return name
 	}
 	return FileName(pkg.Artifact.URL)
+}
+
+// wasmMagic is the 4-byte WebAssembly module header (\0asm).
+var wasmMagic = []byte{0x00, 'a', 's', 'm'}
+
+// versionMatches compares two semantic versions tolerating a leading "v"
+// (GitHub release tags conventionally carry one).
+func versionMatches(a, b string) bool {
+	trim := func(s string) string { return strings.TrimPrefix(strings.TrimSpace(s), "v") }
+	return trim(a) == trim(b)
+}
+
+// assertRuntimeConsistency fast-fails an install when the materialized
+// entrypoint contradicts the manifest's runtime type: a WASM runtime must
+// back a WASM module and a process runtime must not. The check is advisory
+// (a module's header is not proof of correct behavior) but rejects the
+// overwhelmingly common mismatch of shipping the wrong artifact kind. Kinds
+// whose artifacts are not files (container, remote) are skipped.
+func assertRuntimeConsistency(root, runtimeType, entrypoint string) error {
+	if runtimeType != shadexec.RuntimeKindProcess && runtimeType != shadexec.RuntimeKindWasm {
+		return nil
+	}
+
+	f, err := os.Open(filepath.Join(root, filepath.FromSlash(entrypoint)))
+	if err != nil {
+		return fmt.Errorf("%w: entrypoint %q not materialized: %v", ErrManifestInvalid, entrypoint, err)
+	}
+	defer f.Close()
+
+	head := make([]byte, len(wasmMagic))
+	n, _ := io.ReadFull(f, head)
+	isWasm := n == len(wasmMagic) && bytes.Equal(head, wasmMagic)
+
+	switch {
+	case runtimeType == shadexec.RuntimeKindWasm && !isWasm:
+		return fmt.Errorf("%w: runtime type is %q but entrypoint %q is not a WebAssembly module", ErrManifestInvalid, runtimeType, entrypoint)
+	case runtimeType == shadexec.RuntimeKindProcess && isWasm:
+		return fmt.Errorf("%w: runtime type is %q but entrypoint %q is a WebAssembly module; declare runtime type %q or ship a native binary", ErrManifestInvalid, runtimeType, entrypoint, shadexec.RuntimeKindWasm)
+	}
+	return nil
 }
