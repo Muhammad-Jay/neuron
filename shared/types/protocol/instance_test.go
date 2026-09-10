@@ -55,3 +55,46 @@ func TestParseUserKeyColonStringRoundTrip(t *testing.T) {
 		t.Errorf("round trip mismatch: %+v != %+v", parsed, key)
 	}
 }
+
+func TestColonStringPreservesPartialKey(t *testing.T) {
+	tests := []struct {
+		key  InstanceKey
+		want string
+	}{
+		{InstanceKey{SystemID: "order-processing-ts", Version: "2.0.0"}, "order-processing-ts:2.0.0::"},
+		{InstanceKey{SystemID: "order-processing-ts"}, "order-processing-ts:latest::"},
+		{InstanceKey{SystemID: "sys", Version: "1.0.0", Hash: "abc123"}, "sys:1.0.0:abc123:"},
+		{InstanceKey{SystemID: "sys", Version: "1.0.0", Hash: "abc123", Env: "prod"}, "sys:1.0.0:abc123:prod"},
+	}
+	for _, tt := range tests {
+		got := tt.key.ColonString()
+		if got != tt.want {
+			t.Errorf("ColonString(%+v) = %q, want %q", tt.key, got, tt.want)
+		}
+
+		parsed, err := ParseKey(got)
+		if err != nil {
+			t.Fatalf("ParseKey(%q): %v", got, err)
+		}
+		if parsed.Hash != tt.key.Hash || parsed.Env != tt.key.Env {
+			t.Errorf("ParseKey(%q) = %+v, want hash %q env %q", got, parsed, tt.key.Hash, tt.key.Env)
+		}
+	}
+}
+
+func TestParseUserKeyAtFormColonRoundTrip(t *testing.T) {
+	key, err := ParseUserKey("order-processing-ts@2.0.0")
+	if err != nil {
+		t.Fatalf("parse at-form: %v", err)
+	}
+	parsed, err := ParseUserKey(key.ColonString())
+	if err != nil {
+		t.Fatalf("parse colon form: %v", err)
+	}
+	if parsed != key {
+		t.Errorf("at->colon round trip mismatch: %+v != %+v", parsed, key)
+	}
+	if parsed.Env != "" || parsed.Hash != "" {
+		t.Errorf("expected partial key to stay env/hash-less, got %+v", parsed)
+	}
+}

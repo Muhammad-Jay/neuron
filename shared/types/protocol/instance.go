@@ -28,18 +28,17 @@ func (k InstanceKey) String() string {
 	return fmt.Sprintf("%s@%s#%s:%s", k.SystemID, k.Version, k.Hash, k.Env)
 }
 
-// String returns the colon-encoded form used on the wire and in URL paths:
-// systemID:version:hash[:env]. Env is optional and defaults to development.
+// ColonString renders the key in its colon-encoded wire form used in URL
+// paths: systemID[:version[:hash[:env]]]. The version defaults to "latest",
+// but an empty hash or environment is preserved as an empty segment so a
+// partial key stays partial: the server then resolves the registration
+// regardless of hash or environment instead of defaulting them itself.
 func (k InstanceKey) ColonString() string {
 	version := k.Version
 	if version == "" {
-		version = "latest"
+		version = VersionLatest
 	}
-	env := k.Env
-	if env == "" {
-		env = "development"
-	}
-	return fmt.Sprintf("%s:%s:%s:%s", k.SystemID, version, k.Hash, env)
+	return fmt.Sprintf("%s:%s:%s:%s", k.SystemID, version, k.Hash, k.Env)
 }
 
 // ParseKey parses a colon-encoded InstanceKey: systemID[:version[:hash[:env]]].

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Muhammad-Jay/neuron/nore/internal/api/utils"
@@ -18,6 +19,23 @@ func (h *Handler) ListExecutions(w http.ResponseWriter, r *http.Request) {
 	id := utils.PathID(r.PathValue("id"))
 	i, ok := h.resolveInstance(r, id)
 	if !ok {
+		// The target may still be addressable: a system key that names a
+		// registered but never-instantiated system has no runtime, yet its
+		// executions are vacuously empty. Return an empty list instead of a
+		// 404 so `neuron instance list --target=<name>@<version>` stays useful
+		// before the first execution. Unknown instances and systems 404.
+		if !strings.HasPrefix(id, "inst_") {
+			if key, err := protocol.ParseKey(id); err == nil {
+				if exists, existsErr := h.systems.Exists(r.Context(), key); existsErr == nil && exists {
+					utils.WriteJSON(w, http.StatusOK, protocol.Response{
+						Message: "executions",
+						Status:  http.StatusOK,
+						Data:    []protocol.ExecutionItem{},
+					})
+					return
+				}
+			}
+		}
 		utils.ErrorJSON(w, http.StatusNotFound, fmt.Errorf("instance %s not found", id))
 		return
 	}
